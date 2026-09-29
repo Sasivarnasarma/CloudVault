@@ -1,4 +1,4 @@
-import { Folder, Trash2 } from 'lucide-react';
+import { Download, Folder, Trash2 } from 'lucide-react';
 import type { FileObject, FolderObject } from '../../types';
 import { formatBytes, formatDate } from '../../lib/formatters';
 import { FileIcon } from './FileIcon';
@@ -7,6 +7,7 @@ interface FileListProps {
   folders: FolderObject[];
   objects: FileObject[];
   onFolderClick: (prefix: string) => void;
+  onDownloadFile?: (key: string, name: string) => void;
   onDeleteFile?: (key: string) => void;
   onDeleteFolder?: (prefix: string) => void;
 }
@@ -15,6 +16,7 @@ export function FileList({
   folders,
   objects,
   onFolderClick,
+  onDownloadFile,
   onDeleteFile,
   onDeleteFolder,
 }: FileListProps) {
@@ -97,6 +99,15 @@ export function FileList({
                 </td>
                 <td className="py-3.5 px-4 text-right">
                   <div className="flex items-center justify-end gap-1">
+                    {onDownloadFile && (
+                      <button
+                        onClick={() => onDownloadFile(file.key, file.name)}
+                        className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors"
+                        title="Download File"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    )}
                     {onDeleteFile && (
                       <button
                         onClick={() => onDeleteFile(file.key)}

@@ -12,12 +12,18 @@ import {
 } from 'lucide-react';
 import { fetchHealthStatus } from './services/apiClient';
 import { deleteFolder, deleteObject } from './services/storageApi';
+import {
+  requestPresignedDownload,
+  triggerBrowserDownload,
+} from './services/uploadService';
 import { useObjects } from './hooks/useObjects';
+import { useUpload } from './hooks/useUpload';
 import { Breadcrumbs } from './components/common/Breadcrumbs';
 import { Sidebar } from './components/common/Sidebar';
 import { FileList } from './features/files/FileList';
 import { FileSkeleton } from './features/files/FileSkeleton';
 import { EmptyFolderState } from './features/files/EmptyFolderState';
+import { UploadModal } from './features/upload/UploadModal';
 import { formatBytes } from './lib/formatters';
 import type { HealthResponse } from './types';
 
@@ -27,6 +33,7 @@ export function App() {
   const [healthLoading, setHealthLoading] = useState<boolean>(true);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
 
   const {
     currentPrefix,
@@ -37,6 +44,8 @@ export function App() {
     navigateUp,
     refetch,
   } = useObjects('');
+
+  const { queue, isUploading, startUploads, clearQueue } = useUpload();
 
   const loadHealth = async () => {
     setHealthLoading(true);
@@ -54,6 +63,17 @@ export function App() {
   useEffect(() => {
     loadHealth();
   }, []);
+
+  const handleDownloadFile = async (key: string, name: string) => {
+    try {
+      setActionNotice(`Generating download URL for '${name}'...`);
+      const presignRes = await requestPresignedDownload(key, name);
+      triggerBrowserDownload(presignRes.download_url);
+      setActionNotice(`Download started for '${name}'.`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to download file');
+    }
+  };
 
   const handleDeleteFile = async (key: string) => {
     if (!window.confirm(`Are you sure you want to delete '${key}'?`)) return;
@@ -80,6 +100,12 @@ export function App() {
     } catch (err: any) {
       alert(err.message || 'Failed to delete folder');
     }
+  };
+
+  const handleStartUploads = (files: File[]) => {
+    startUploads(files, currentPrefix, () => {
+      refetch();
+    });
   };
 
   return (
@@ -233,8 +259,8 @@ export function App() {
                 New Folder
               </button>
               <button
-                disabled
-                className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg text-xs transition-colors cursor-not-allowed opacity-60"
+                onClick={() => setIsUploadModalOpen(true)}
+                className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg text-xs transition-colors"
               >
                 <Upload className="w-4 h-4" />
                 Upload
@@ -261,6 +287,7 @@ export function App() {
                 folders={data.folders}
                 objects={data.objects}
                 onFolderClick={navigateToFolder}
+                onDownloadFile={handleDownloadFile}
                 onDeleteFile={handleDeleteFile}
                 onDeleteFolder={handleDeleteFolder}
               />
@@ -268,6 +295,17 @@ export function App() {
           </div>
         </main>
       </div>
+
+      {/* Upload Modal */}
+      <UploadModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        targetPrefix={currentPrefix}
+        queue={queue}
+        isUploading={isUploading}
+        onStartUpload={handleStartUploads}
+        onClearQueue={clearQueue}
+      />
     </div>
   );
 }

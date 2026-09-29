@@ -28,3 +28,17 @@ export interface ObjectListResponse {
   total_count: number;
   total_size: number;
 }
+
+export interface PresignUploadResponse {
+  upload_url: string;
+  method: string;
+  headers: Record<string, string>;
+  key: string;
+  expires_in: number;
+}
+
+export interface PresignDownloadResponse {
+  download_url: string;
+  key: string;
+  expires_in: number;
+}
