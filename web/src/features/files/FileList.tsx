@@ -1,4 +1,4 @@
-import { Download, Folder, Trash2 } from 'lucide-react';
+import { Download, Folder, Info, Trash2 } from 'lucide-react';
 import type { FileObject, FolderObject } from '../../types';
 import { formatBytes, formatDate } from '../../lib/formatters';
 import { FileIcon } from './FileIcon';
@@ -7,6 +7,7 @@ interface FileListProps {
   folders: FolderObject[];
   objects: FileObject[];
   onFolderClick: (prefix: string) => void;
+  onSelectFile?: (file: FileObject) => void;
   onDownloadFile?: (key: string, name: string) => void;
   onDeleteFile?: (key: string) => void;
   onDeleteFolder?: (prefix: string) => void;
@@ -16,6 +17,7 @@ export function FileList({
   folders,
   objects,
   onFolderClick,
+  onSelectFile,
   onDownloadFile,
   onDeleteFile,
   onDeleteFolder,
@@ -82,7 +84,10 @@ export function FileList({
                       <FileIcon fileName={file.name} contentType={file.content_type} />
                     </div>
                     <div className="flex flex-col min-w-0">
-                      <span className="font-medium text-slate-200 group-hover:text-white transition-colors truncate max-w-60 sm:max-w-90">
+                      <span
+                        onClick={() => onSelectFile && onSelectFile(file)}
+                        className="font-medium text-slate-200 group-hover:text-white cursor-pointer hover:underline transition-colors truncate max-w-60 sm:max-w-90"
+                      >
                         {file.name}
                       </span>
                       <span className="text-xs text-slate-500 font-mono sm:hidden">
@@ -99,6 +104,15 @@ export function FileList({
                 </td>
                 <td className="py-3.5 px-4 text-right">
                   <div className="flex items-center justify-end gap-1">
+                    {onSelectFile && (
+                      <button
+                        onClick={() => onSelectFile(file)}
+                        className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
+                        title="View Object Details"
+                      >
+                        <Info className="w-4 h-4" />
+                      </button>
+                    )}
                     {onDownloadFile && (
                       <button
                         onClick={() => onDownloadFile(file.key, file.name)}

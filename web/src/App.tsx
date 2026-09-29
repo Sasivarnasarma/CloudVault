@@ -9,6 +9,8 @@ import {
   Database,
   ArrowLeft,
   AlertCircle,
+  Search,
+  Filter,
 } from 'lucide-react';
 import { fetchHealthStatus } from './services/apiClient';
 import { deleteFolder, deleteObject } from './services/storageApi';
@@ -19,23 +21,29 @@ import {
 import { useObjects } from './hooks/useObjects';
 import { useUpload } from './hooks/useUpload';
 import { Breadcrumbs } from './components/common/Breadcrumbs';
-import { Sidebar } from './components/common/Sidebar';
 import { FileList } from './features/files/FileList';
 import { FileSkeleton } from './features/files/FileSkeleton';
 import { EmptyFolderState } from './features/files/EmptyFolderState';
+import { FileDetailsModal } from './features/files/FileDetailsModal';
 import { UploadModal } from './features/upload/UploadModal';
 import { CreateFolderModal } from './features/folders/CreateFolderModal';
 import { formatBytes } from './lib/formatters';
-import type { HealthResponse } from './types';
+import type { FileObject, HealthResponse } from './types';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'files' | 'dashboard' | 'settings'>('files');
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthLoading, setHealthLoading] = useState<boolean>(true);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+
+  // Search & Filter State
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'documents' | 'images' | 'media'>('all');
+
+  // Modal States
   const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
   const [isCreateFolderModalOpen, setIsCreateFolderModalOpen] = useState<boolean>(false);
+  const [selectedFileForDetails, setSelectedFileForDetails] = useState<FileObject | null>(null);
 
   const {
     currentPrefix,
@@ -110,6 +118,30 @@ export function App() {
     });
   };
 
+  // Filter Objects by Search & Category
+  const filteredFolders = (data?.folders || []).filter((f) =>
+    f.name.toLowerCase().includes(searchQuery.toLowerCase().trim())
+  );
+
+  const filteredObjects = (data?.objects || []).filter((file) => {
+    const matchesSearch = file.name.toLowerCase().includes(searchQuery.toLowerCase().trim());
+    if (!matchesSearch) return false;
+
+    if (categoryFilter === 'all') return true;
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    if (categoryFilter === 'images') {
+      return ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext) || file.content_type.startsWith('image/');
+    }
+    if (categoryFilter === 'documents') {
+      return ['pdf', 'doc', 'docx', 'txt', 'md', 'csv', 'xlsx'].includes(ext) || file.content_type.includes('pdf') || file.content_type.includes('text');
+    }
+    if (categoryFilter === 'media') {
+      return ['mp3', 'wav', 'mp4', 'mkv', 'mov', 'webm'].includes(ext) || file.content_type.startsWith('audio/') || file.content_type.startsWith('video/');
+    }
+    return true;
+  });
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {/* Header Bar */}
@@ -169,134 +201,167 @@ export function App() {
         </div>
       </header>
 
-      {/* Main Layout */}
-      <div className="flex-1 flex max-w-7xl w-full mx-auto">
-        <Sidebar
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          health={health}
-          totalObjects={data?.total_count || 0}
-        />
+      {/* Main Layout Area */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6">
+        {/* Action Notice Alert */}
+        {actionNotice && (
+          <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs flex justify-between items-center">
+            <span>{actionNotice}</span>
+            <button
+              onClick={() => setActionNotice(null)}
+              className="text-slate-400 hover:text-white font-bold text-sm ml-2"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 flex flex-col gap-6 min-w-0">
-          {/* Action Notice Alert */}
-          {actionNotice && (
-            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs flex justify-between items-center">
-              <span>{actionNotice}</span>
-              <button
-                onClick={() => setActionNotice(null)}
-                className="text-slate-400 hover:text-white font-bold text-sm ml-2"
-              >
-                ✕
-              </button>
+        {/* Top Banner Stats Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center gap-4">
+            <div className="p-3 bg-indigo-500/10 text-indigo-400 rounded-lg border border-indigo-500/20">
+              <Database className="w-5 h-5" />
             </div>
-          )}
-
-          {/* Top Banner Stats Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center gap-4">
-              <div className="p-3 bg-indigo-500/10 text-indigo-400 rounded-lg border border-indigo-500/20">
-                <Database className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Provider
-                </p>
-                <p className="text-base font-semibold text-white capitalize truncate">
-                  {health?.storage_provider || 'Loading...'}
-                </p>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center gap-4">
-              <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">
-                <HardDrive className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Visible Size
-                </p>
-                <p className="text-base font-semibold text-white font-mono">
-                  {formatBytes(data?.total_size || 0)}
-                </p>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center gap-4">
-              <div className="p-3 bg-cyan-500/10 text-cyan-400 rounded-lg border border-cyan-500/20">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Total Items
-                </p>
-                <p className="text-base font-semibold text-white font-mono">
-                  {data?.total_count || 0}
-                </p>
-              </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Provider
+              </p>
+              <p className="text-base font-semibold text-white capitalize truncate">
+                {health?.storage_provider || 'Loading...'}
+              </p>
             </div>
           </div>
 
-          {/* Controls Bar: Breadcrumbs & Action Buttons */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-            <div className="flex items-center gap-2 min-w-0">
-              {currentPrefix && (
-                <button
-                  onClick={navigateUp}
-                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg border border-slate-700 transition-colors"
-                  title="Go up one folder"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                </button>
-              )}
-              <Breadcrumbs currentPrefix={currentPrefix} onNavigate={navigateToFolder} />
+          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center gap-4">
+            <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">
+              <HardDrive className="w-5 h-5" />
             </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => setIsCreateFolderModalOpen(true)}
-                className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-lg border border-slate-700 text-xs transition-colors"
-              >
-                <FolderPlus className="w-4 h-4 text-amber-400" />
-                New Folder
-              </button>
-              <button
-                onClick={() => setIsUploadModalOpen(true)}
-                className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg text-xs transition-colors"
-              >
-                <Upload className="w-4 h-4" />
-                Upload
-              </button>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Visible Size
+              </p>
+              <p className="text-base font-semibold text-white font-mono">
+                {formatBytes(data?.total_size || 0)}
+              </p>
             </div>
           </div>
 
-          {/* Main File Browser Area */}
-          <div className="flex-1 flex flex-col">
-            {error ? (
-              <div className="p-6 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3">
-                <AlertCircle className="w-5 h-5 shrink-0" />
-                <div>
-                  <p className="font-semibold">Unable to list objects</p>
-                  <p className="text-xs opacity-80">{error}</p>
-                </div>
-              </div>
-            ) : loading ? (
-              <FileSkeleton />
-            ) : !data || (data.folders.length === 0 && data.objects.length === 0) ? (
-              <EmptyFolderState currentPrefix={currentPrefix} />
-            ) : (
-              <FileList
-                folders={data.folders}
-                objects={data.objects}
-                onFolderClick={navigateToFolder}
-                onDownloadFile={handleDownloadFile}
-                onDeleteFile={handleDeleteFile}
-                onDeleteFolder={handleDeleteFolder}
-              />
+          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center gap-4">
+            <div className="p-3 bg-cyan-500/10 text-cyan-400 rounded-lg border border-cyan-500/20">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Total Items
+              </p>
+              <p className="text-base font-semibold text-white font-mono">
+                {data?.total_count || 0}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Search & Filter Bar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search objects in current directory..."
+              className="w-full pl-9 pr-4 py-2 bg-slate-900 rounded-lg border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-all"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs"
+              >
+                Clear
+              </button>
             )}
           </div>
-        </main>
-      </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            <span className="text-xs text-slate-500 flex items-center gap-1 pr-1 font-medium">
+              <Filter className="w-3.5 h-3.5" /> Filter:
+            </span>
+            {(['all', 'documents', 'images', 'media'] as const).map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setCategoryFilter(cat)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium capitalize transition-colors ${
+                  categoryFilter === cat
+                    ? 'bg-indigo-600 text-white font-semibold'
+                    : 'bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Controls Bar: Breadcrumbs & Action Buttons */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-900/80 border border-slate-800">
+          <div className="flex items-center gap-2 min-w-0">
+            {currentPrefix && (
+              <button
+                onClick={navigateUp}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg border border-slate-700 transition-colors"
+                title="Go up one folder"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
+            <Breadcrumbs currentPrefix={currentPrefix} onNavigate={navigateToFolder} />
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setIsCreateFolderModalOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-lg border border-slate-700 text-xs transition-colors"
+            >
+              <FolderPlus className="w-4 h-4 text-amber-400" />
+              New Folder
+            </button>
+            <button
+              onClick={() => setIsUploadModalOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg text-xs transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              Upload
+            </button>
+          </div>
+        </div>
+
+        {/* Main File Browser Area */}
+        <div className="flex-1 flex flex-col">
+          {error ? (
+            <div className="p-6 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <div>
+                <p className="font-semibold">Unable to list objects</p>
+                <p className="text-xs opacity-80">{error}</p>
+              </div>
+            </div>
+          ) : loading ? (
+            <FileSkeleton />
+          ) : !data || (filteredFolders.length === 0 && filteredObjects.length === 0) ? (
+            <EmptyFolderState currentPrefix={currentPrefix} />
+          ) : (
+            <FileList
+              folders={filteredFolders}
+              objects={filteredObjects}
+              onFolderClick={navigateToFolder}
+              onSelectFile={(file) => setSelectedFileForDetails(file)}
+              onDownloadFile={handleDownloadFile}
+              onDeleteFile={handleDeleteFile}
+              onDeleteFolder={handleDeleteFolder}
+            />
+          )}
+        </div>
+      </main>
 
       {/* Upload Modal */}
       <UploadModal
@@ -318,6 +383,15 @@ export function App() {
           setActionNotice('Folder created successfully.');
           refetch();
         }}
+      />
+
+      {/* File Details Inspector Modal */}
+      <FileDetailsModal
+        isOpen={!!selectedFileForDetails}
+        file={selectedFileForDetails}
+        onClose={() => setSelectedFileForDetails(null)}
+        onDownload={handleDownloadFile}
+        bucketName={health?.bucket}
       />
     </div>
   );
