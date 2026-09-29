@@ -24,6 +24,7 @@ import { FileList } from './features/files/FileList';
 import { FileSkeleton } from './features/files/FileSkeleton';
 import { EmptyFolderState } from './features/files/EmptyFolderState';
 import { UploadModal } from './features/upload/UploadModal';
+import { CreateFolderModal } from './features/folders/CreateFolderModal';
 import { formatBytes } from './lib/formatters';
 import type { HealthResponse } from './types';
 
@@ -34,6 +35,7 @@ export function App() {
   const [healthError, setHealthError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
+  const [isCreateFolderModalOpen, setIsCreateFolderModalOpen] = useState<boolean>(false);
 
   const {
     currentPrefix,
@@ -252,10 +254,10 @@ export function App() {
 
             <div className="flex items-center gap-2 shrink-0">
               <button
-                disabled
-                className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 text-slate-400 rounded-lg border border-slate-700 text-xs font-medium cursor-not-allowed opacity-60"
+                onClick={() => setIsCreateFolderModalOpen(true)}
+                className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-lg border border-slate-700 text-xs transition-colors"
               >
-                <FolderPlus className="w-4 h-4" />
+                <FolderPlus className="w-4 h-4 text-amber-400" />
                 New Folder
               </button>
               <button
@@ -305,6 +307,17 @@ export function App() {
         isUploading={isUploading}
         onStartUpload={handleStartUploads}
         onClearQueue={clearQueue}
+      />
+
+      {/* Create Folder Modal */}
+      <CreateFolderModal
+        isOpen={isCreateFolderModalOpen}
+        onClose={() => setIsCreateFolderModalOpen(false)}
+        targetPrefix={currentPrefix}
+        onFolderCreated={() => {
+          setActionNotice('Folder created successfully.');
+          refetch();
+        }}
       />
     </div>
   );
