@@ -4,6 +4,7 @@ export interface HealthResponse {
   version: string;
   storage_provider: string;
   bucket: string;
+  storage_connected: boolean;
 }
 
 export interface FileObject {

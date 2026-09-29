@@ -59,8 +59,8 @@ export function App() {
                 </span>
               ) : (
                 <span className="flex items-center gap-2 text-emerald-400">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  Backend Online ({health?.storage_provider.toUpperCase()})
+                  <span className={`w-2 h-2 rounded-full ${health?.storage_connected ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                  Backend Online ({health?.storage_provider.toUpperCase()}{health?.storage_connected ? '' : ' - S3 Disconnected'})
                 </span>
               )}
             </div>

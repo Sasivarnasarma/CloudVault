@@ -7,3 +7,4 @@ class HealthResponse(BaseModel):
     version: str
     storage_provider: str
     bucket: str
+    storage_connected: bool
