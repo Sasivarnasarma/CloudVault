@@ -26,6 +26,7 @@ import { triggerBrowserDownload } from '../services/transferService';
 import type { HealthResponse } from '../types';
 
 const VIEW_KEY = 'cloudvault_view';
+const INSPECTOR_WIDTH = '22rem';
 
 function loadView(): ViewMode {
   try {
@@ -360,19 +361,22 @@ export function FilesPage() {
               <motion.aside
                 key="inspector"
                 aria-label="File details"
-                className="fixed inset-y-0 right-0 z-30 w-[min(22rem,100vw)] overflow-hidden border-l border-line bg-surface shadow-pop xl:static xl:z-auto xl:shadow-none"
-                initial={{ x: 40, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: 40, opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 420, damping: 38 }}
+                className="fixed inset-y-0 right-0 z-30 max-w-[100vw] shrink-0 overflow-hidden border-l border-line bg-surface shadow-pop xl:static xl:z-auto xl:shadow-none"
+                // Animate width (not position) so the file list reflows smoothly instead of leaving a gap.
+                initial={{ width: 0, opacity: 0 }}
+                animate={{ width: INSPECTOR_WIDTH, opacity: 1 }}
+                exit={{ width: 0, opacity: 0 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
               >
-                <Inspector
-                  file={selectedFile}
-                  bucket={health?.bucket}
-                  onClose={() => setSelectedId(null)}
-                  onDownload={handleDownload}
-                  onDelete={(file) => setPendingDelete({ type: 'file', id: file.key, name: file.name, file })}
-                />
+                <div className="h-full max-w-[100vw]" style={{ width: INSPECTOR_WIDTH }}>
+                  <Inspector
+                    file={selectedFile}
+                    bucket={health?.bucket}
+                    onClose={() => setSelectedId(null)}
+                    onDownload={handleDownload}
+                    onDelete={(file) => setPendingDelete({ type: 'file', id: file.key, name: file.name, file })}
+                  />
+                </div>
               </motion.aside>
             )}
           </AnimatePresence>
@@ -446,7 +450,7 @@ export function FilesPage() {
 
       <Toaster
         theme={theme}
-        position="bottom-left"
+        position="top-center"
         toastOptions={{
           style: {
             background: 'var(--surface-2)',

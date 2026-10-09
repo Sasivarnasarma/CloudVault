@@ -121,7 +121,8 @@ describe('useObjects', () => {
     expect(result.current.loading).toBe(false);
 
     act(() => result.current.refetch());
-    await waitFor(() => expect(result.current.error).toBeNull());
-    expect(result.current.data).not.toBeNull();
+    await waitFor(() => expect(result.current.data).not.toBeNull());
+    expect(result.current.error).toBeNull();
+    expect(result.current.loading).toBe(false);
   });
 });
