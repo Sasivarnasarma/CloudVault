@@ -18,6 +18,8 @@ from app.schemas.storage import (
 )
 from app.services.storage.base import BaseStorageService
 from app.services.storage.exceptions import (
+    InvalidKeyError,
+    PayloadTooLargeError,
     ObjectExistsError,
     ObjectNotFoundError,
     StorageAccessError,
@@ -72,6 +74,8 @@ def _storage_errors(action: str) -> Iterator[None]:
             raise StorageUnavailableError("The configured bucket does not exist") from e
         if code in _ACCESS_CODES:
             raise StorageAccessError() from e
+        if code == "EntityTooLarge":
+            raise PayloadTooLargeError("The object is too large to copy in one step") from e
         raise StorageError(f"Storage failed while {action}") from e
     except BotoCoreError as e:
         logger.error("Storage connection error while %s: %s", action, e)
@@ -202,6 +206,103 @@ class S3StorageService(BaseStorageService):
                 f"Deleted {deleted_count} items, but {len(failed)} could not be deleted"
             )
         return deleted_count
+
+    def _copy_one(self, source_key: str, destination_key: str) -> None:
+        self.client.copy_object(
+            Bucket=self.bucket,
+            Key=destination_key,
+            CopySource={"Bucket": self.bucket, "Key": source_key},
+        )
+
+    def _delete_keys(self, keys: List[str]) -> List[str]:
+        """Delete keys in batches of 1000. Returns the keys that could not be deleted."""
+        failed: List[str] = []
+        for start in range(0, len(keys), 1000):
+            batch = [{"Key": key} for key in keys[start : start + 1000]]
+            result = self.client.delete_objects(Bucket=self.bucket, Delete={"Objects": batch})
+            failed.extend(err.get("Key", "?") for err in result.get("Errors", []))
+        return failed
+
+    def _list_keys(self, prefix: str) -> List[str]:
+        keys: List[str] = []
+        paginator = self.client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
+            keys.extend(obj["Key"] for obj in page.get("Contents", []))
+        return keys
+
+    def copy_object(self, source_key: str, destination_key: str, allow_overwrite: bool = False) -> str:
+        source = normalize_key(source_key)
+        destination = normalize_key(destination_key)
+        if source == destination:
+            raise InvalidKeyError("Source and destination are the same")
+        with _storage_errors("copying object"):
+            if not self._exists(source):
+                raise ObjectNotFoundError()
+            if not allow_overwrite and self._exists(destination):
+                raise ObjectExistsError("A file with this name already exists")
+            self._copy_one(source, destination)
+        return destination
+
+    def move_object(self, source_key: str, destination_key: str, allow_overwrite: bool = False) -> str:
+        source = normalize_key(source_key)
+        destination = self.copy_object(source, destination_key, allow_overwrite)
+        try:
+            self.delete_object(source)
+        except StorageError as e:
+            raise StorageError("The file was copied, but the original could not be removed") from e
+        return destination
+
+    @staticmethod
+    def _folder_pair(source_prefix: str, destination_prefix: str) -> Tuple[str, str]:
+        source = normalize_folder(source_prefix)
+        destination = normalize_folder(destination_prefix)
+        if source == destination:
+            raise InvalidKeyError("Source and destination are the same")
+        if destination.startswith(source):
+            raise InvalidKeyError("A folder cannot be moved or copied into itself")
+        return source, destination
+
+    def _copy_folder_keys(self, source: str, destination: str) -> List[str]:
+        """Copy everything under `source`, rolling back on failure. Returns the source keys."""
+        keys = self._list_keys(source)
+        if not keys:
+            raise ObjectNotFoundError("Folder not found")
+        if self._prefix_has_objects(destination):
+            raise ObjectExistsError("A folder with this name already exists")
+
+        copied: List[str] = []
+        try:
+            for key in keys:
+                target = destination + key[len(source):]
+                self._copy_one(key, target)
+                copied.append(target)
+        except Exception:
+            logger.error(
+                "Folder copy '%s' -> '%s' failed after %d/%d objects; rolling back",
+                source, destination, len(copied), len(keys),
+            )
+            try:
+                self._delete_keys(copied)
+            except Exception as rollback_error:  # noqa: BLE001
+                logger.error("Rollback failed: %s", rollback_error)
+            raise
+        return keys
+
+    def copy_folder(self, source_prefix: str, destination_prefix: str) -> int:
+        source, destination = self._folder_pair(source_prefix, destination_prefix)
+        with _storage_errors("copying folder"):
+            return len(self._copy_folder_keys(source, destination))
+
+    def move_folder(self, source_prefix: str, destination_prefix: str) -> int:
+        source, destination = self._folder_pair(source_prefix, destination_prefix)
+        with _storage_errors("moving folder"):
+            keys = self._copy_folder_keys(source, destination)
+            failed = self._delete_keys(keys)
+        if failed:
+            raise StorageError(
+                f"The folder was copied, but {len(failed)} original items could not be removed"
+            )
+        return len(keys)
 
     def generate_upload_url(
         self,

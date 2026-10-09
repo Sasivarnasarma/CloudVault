@@ -29,6 +29,7 @@ class PresignUploadRequest(BaseModel):
         description="MIME content type of the file",
     )
     size: Optional[int] = Field(default=None, ge=0, description="File size in bytes")
+    overwrite: bool = Field(default=False, description="Replace the object if the key already exists")
 
 
 # Responses share the storage-layer shapes.
@@ -40,3 +41,15 @@ class DeleteObjectResponse(BaseModel):
     success: bool
     key: str
     message: str
+
+
+class TransferObjectRequest(BaseModel):
+    source: str = Field(description="Existing object key")
+    destination: str = Field(description="New object key")
+    overwrite: bool = Field(default=False, description="Replace the destination if it exists")
+
+
+class TransferObjectResponse(BaseModel):
+    success: bool
+    source: str
+    destination: str

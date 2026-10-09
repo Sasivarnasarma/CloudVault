@@ -4,6 +4,8 @@ from app.schemas.folder import (
     CreateFolderRequest,
     CreateFolderResponse,
     DeleteFolderResponse,
+    TransferFolderRequest,
+    TransferFolderResponse,
 )
 from app.services.storage.base import BaseStorageService
 from app.services.storage.factory import get_storage_service
@@ -31,3 +33,25 @@ def delete_folder(
     clean_prefix = normalize_folder(prefix)
     deleted_count = storage.delete_folder(prefix=clean_prefix)
     return DeleteFolderResponse(success=True, prefix=clean_prefix, deleted_count=deleted_count)
+
+
+@router.post("/copy", response_model=TransferFolderResponse)
+def copy_folder(
+    payload: TransferFolderRequest,
+    storage: BaseStorageService = Depends(get_storage_service),
+):
+    """Recursively copy a folder to a new path. Never overwrites existing content."""
+    source, destination = normalize_folder(payload.source), normalize_folder(payload.destination)
+    count = storage.copy_folder(source, destination)
+    return TransferFolderResponse(success=True, source=source, destination=destination, item_count=count)
+
+
+@router.post("/move", response_model=TransferFolderResponse)
+def move_folder(
+    payload: TransferFolderRequest,
+    storage: BaseStorageService = Depends(get_storage_service),
+):
+    """Move or rename a folder. Never overwrites existing content."""
+    source, destination = normalize_folder(payload.source), normalize_folder(payload.destination)
+    count = storage.move_folder(source, destination)
+    return TransferFolderResponse(success=True, source=source, destination=destination, item_count=count)

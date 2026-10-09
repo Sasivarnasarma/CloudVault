@@ -64,6 +64,30 @@ class BaseStorageService(ABC):
         pass
 
     @abstractmethod
+    def copy_object(self, source_key: str, destination_key: str, allow_overwrite: bool = False) -> str:
+        """Copy one object. Returns the destination key.
+
+        Raises ObjectNotFoundError if the source is missing and ObjectExistsError if the
+        destination exists and `allow_overwrite` is False.
+        """
+        pass
+
+    @abstractmethod
+    def move_object(self, source_key: str, destination_key: str, allow_overwrite: bool = False) -> str:
+        """Copy an object to a new key, then remove the original. Returns the destination key."""
+        pass
+
+    @abstractmethod
+    def copy_folder(self, source_prefix: str, destination_prefix: str) -> int:
+        """Recursively copy a folder. Never overwrites; returns the number of objects copied."""
+        pass
+
+    @abstractmethod
+    def move_folder(self, source_prefix: str, destination_prefix: str) -> int:
+        """Recursively move a folder. Never overwrites; returns the number of objects moved."""
+        pass
+
+    @abstractmethod
     def check_connection(self) -> bool:
         """Check connection and bucket existence with storage backend."""
         pass

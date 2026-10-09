@@ -66,8 +66,31 @@ class FakeStorage(BaseStorageService):
         self.calls.append(("delete_folder", prefix))
         return 3
 
+    def copy_object(self, source_key, destination_key, allow_overwrite=False):
+        self.calls.append(("copy_object", f"{source_key}->{destination_key}:{allow_overwrite}"))
+        if source_key not in self.existing:
+            raise ObjectNotFoundError()
+        if destination_key in self.existing and not allow_overwrite:
+            raise ObjectExistsError("A file with this name already exists")
+        return destination_key
+
+    def move_object(self, source_key, destination_key, allow_overwrite=False):
+        self.calls.append(("move_object", f"{source_key}->{destination_key}:{allow_overwrite}"))
+        return self.copy_object(source_key, destination_key, allow_overwrite)
+
+    def copy_folder(self, source_prefix, destination_prefix):
+        self.calls.append(("copy_folder", f"{source_prefix}->{destination_prefix}"))
+        if destination_prefix in self.existing_folders:
+            raise ObjectExistsError("A folder with this name already exists")
+        return 5
+
+    def move_folder(self, source_prefix, destination_prefix):
+        self.calls.append(("move_folder", f"{source_prefix}->{destination_prefix}"))
+        return self.copy_folder(source_prefix, destination_prefix)
+
     def generate_upload_url(self, key, content_type, expires_in=900, allow_overwrite=False):
-        if key in self.existing:
+        self.calls.append(("presign_upload", f"{key}:{allow_overwrite}"))
+        if key in self.existing and not allow_overwrite:
             raise ObjectExistsError("A file with this name already exists")
         return PresignedUploadData(
             upload_url="https://example.test/put",
@@ -233,3 +256,61 @@ def test_cors_allows_configured_origin_only(client):
         headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "DELETE"},
     )
     assert "access-control-allow-origin" not in blocked.headers
+
+
+def test_presign_upload_overwrite_flag_is_forwarded(client, storage):
+    blocked = client.post("/api/objects/presign-upload", json={"key": "exists.txt"})
+    assert blocked.status_code == 409
+    allowed = client.post("/api/objects/presign-upload", json={"key": "exists.txt", "overwrite": True})
+    assert allowed.status_code == 200
+    assert ("presign_upload", "exists.txt:True") in storage.calls
+
+
+@pytest.mark.parametrize("action", ["copy", "move"])
+def test_object_transfer_success_normalizes_keys(client, storage, action):
+    res = client.post(f"/api/objects/{action}", json={"source": "/exists.txt", "destination": "/docs//new name.txt"})
+    assert res.status_code == 200
+    assert res.json() == {"success": True, "source": "exists.txt", "destination": "docs/new name.txt"}
+    assert (f"{action}_object", "exists.txt->docs/new name.txt:False") in storage.calls
+
+
+@pytest.mark.parametrize("action", ["copy", "move"])
+def test_object_transfer_errors(client, action):
+    missing = client.post(f"/api/objects/{action}", json={"source": "nope.txt", "destination": "x.txt"})
+    assert missing.status_code == 404
+    for bad in ("/", "a/", "../x", "a\\b"):
+        res = client.post(f"/api/objects/{action}", json={"source": "exists.txt", "destination": bad})
+        assert res.status_code == 400, bad
+        res = client.post(f"/api/objects/{action}", json={"source": bad, "destination": "x.txt"})
+        assert res.status_code == 400, bad
+
+
+@pytest.mark.parametrize("action", ["copy", "move"])
+def test_object_transfer_conflicts_unless_overwrite(client, storage, action):
+    storage.existing.add("taken.txt")
+    conflict = client.post(f"/api/objects/{action}", json={"source": "exists.txt", "destination": "taken.txt"})
+    assert conflict.status_code == 409
+    assert conflict.json() == {"detail": "A file with this name already exists"}
+
+    forced = client.post(
+        f"/api/objects/{action}", json={"source": "exists.txt", "destination": "taken.txt", "overwrite": True}
+    )
+    assert forced.status_code == 200
+    assert (f"{action}_object", "exists.txt->taken.txt:True") in storage.calls
+
+
+@pytest.mark.parametrize("action", ["copy", "move"])
+def test_folder_transfer_success_normalizes_paths(client, storage, action):
+    res = client.post(f"/api/folders/{action}", json={"source": "/docs//old", "destination": "archive/new/"})
+    assert res.status_code == 200
+    assert res.json() == {"success": True, "source": "docs/old/", "destination": "archive/new/", "item_count": 5}
+    assert (f"{action}_folder", "docs/old/->archive/new/") in storage.calls
+
+
+@pytest.mark.parametrize("action", ["copy", "move"])
+def test_folder_transfer_rejects_root_and_traversal_and_conflicts(client, action):
+    for bad in ("/", "//", "..", "a/../b"):
+        assert client.post(f"/api/folders/{action}", json={"source": "docs", "destination": bad}).status_code == 400
+        assert client.post(f"/api/folders/{action}", json={"source": bad, "destination": "docs2"}).status_code == 400
+    taken = client.post(f"/api/folders/{action}", json={"source": "docs", "destination": "taken"})
+    assert taken.status_code == 409

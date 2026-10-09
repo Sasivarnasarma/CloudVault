@@ -9,6 +9,8 @@ from app.schemas.object import (
     PresignDownloadResponse,
     PresignUploadRequest,
     PresignUploadResponse,
+    TransferObjectRequest,
+    TransferObjectResponse,
 )
 from app.schemas.storage import ObjectMetadata
 from app.services.storage.base import BaseStorageService
@@ -63,6 +65,7 @@ def generate_presigned_upload_url(
         key=clean_key,
         content_type=payload.content_type,
         expires_in=UPLOAD_URL_TTL_SECONDS,
+        allow_overwrite=payload.overwrite,
     )
 
 
@@ -91,3 +94,25 @@ def delete_object(
     return DeleteObjectResponse(
         success=True, key=clean_key, message=f"Object '{clean_key}' deleted successfully"
     )
+
+
+@router.post("/copy", response_model=TransferObjectResponse)
+def copy_object(
+    payload: TransferObjectRequest,
+    storage: BaseStorageService = Depends(get_storage_service),
+):
+    """Copy an object to a new key."""
+    source, destination = normalize_key(payload.source), normalize_key(payload.destination)
+    storage.copy_object(source, destination, allow_overwrite=payload.overwrite)
+    return TransferObjectResponse(success=True, source=source, destination=destination)
+
+
+@router.post("/move", response_model=TransferObjectResponse)
+def move_object(
+    payload: TransferObjectRequest,
+    storage: BaseStorageService = Depends(get_storage_service),
+):
+    """Move or rename an object (copy to the new key, then delete the original)."""
+    source, destination = normalize_key(payload.source), normalize_key(payload.destination)
+    storage.move_object(source, destination, allow_overwrite=payload.overwrite)
+    return TransferObjectResponse(success=True, source=source, destination=destination)
