@@ -10,6 +10,7 @@ import { EmptyFolderState } from '../features/files/EmptyFolderState';
 import { FileBrowser, type ViewMode } from '../features/files/FileBrowser';
 import { FileSkeleton } from '../features/files/FileSkeleton';
 import { Inspector } from '../features/files/Inspector';
+import { LoadMore } from '../features/files/LoadMore';
 import { TransferDialog, type TransferTarget } from '../features/files/TransferDialog';
 import { CreateFolderModal } from '../features/folders/CreateFolderModal';
 import { UploadTray } from '../features/upload/UploadTray';
@@ -43,7 +44,19 @@ function hasFiles(e: DragEvent): boolean {
 
 export function FilesPage() {
   const { theme, toggleTheme } = useTheme();
-  const { currentPrefix, data, loading, error, navigateToFolder, navigateUp, refetch } = useObjects();
+  const {
+    currentPrefix,
+    data,
+    loading,
+    error,
+    hasMore,
+    loadingMore,
+    loadMoreError,
+    loadMore,
+    navigateToFolder,
+    navigateUp,
+    refetch,
+  } = useObjects();
   const { queue, isUploading, startUploads, replaceItem, dismissItem, clearQueue } = useUpload();
 
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -368,6 +381,15 @@ export function FilesPage() {
                 onTransfer={(entry, mode) => setTransfer({ entry, mode })}
               />
             )}
+            {!loading && !error && (
+              <LoadMore
+                hasMore={hasMore}
+                loading={loadingMore}
+                error={loadMoreError}
+                loadedCount={(data?.folders.length ?? 0) + (data?.objects.length ?? 0)}
+                onLoadMore={loadMore}
+              />
+            )}
           </main>
 
           <AnimatePresence initial={false}>
@@ -399,7 +421,9 @@ export function FilesPage() {
 
         <footer className="flex items-center gap-3 border-t border-line bg-surface px-5 py-2 text-xs text-ink-3">
           <span>
-            {folderCount} folder{folderCount === 1 ? '' : 's'}, {fileCount} file{fileCount === 1 ? '' : 's'}
+            {folderCount}
+            {hasMore ? '+' : ''} folder{folderCount === 1 ? '' : 's'}, {fileCount}
+            {hasMore ? '+' : ''} file{fileCount === 1 ? '' : 's'}
           </span>
           <span aria-hidden="true">·</span>
           <span className="font-mono">{formatBytes(data?.total_size ?? 0, 1)}</span>

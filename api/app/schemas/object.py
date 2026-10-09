@@ -18,6 +18,8 @@ class ObjectListResponse(BaseModel):
     objects: List[ObjectMetadata]
     total_count: int
     total_size: int
+    next_cursor: Optional[str] = Field(default=None, description="Pass as `cursor` to fetch the next page")
+    has_more: bool = False
 
 
 class PresignUploadRequest(BaseModel):

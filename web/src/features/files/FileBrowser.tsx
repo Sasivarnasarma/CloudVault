@@ -64,7 +64,7 @@ function GridView({ entries, selectedId, ...h }: Omit<FileBrowserProps, 'view' |
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.22, delay: Math.min(i * 0.015, 0.2) }}
               className={cn(
-                'group relative rounded-2xl border bg-surface transition',
+                'group relative rounded-2xl border bg-surface transition [contain-intrinsic-size:auto_9rem] [content-visibility:auto]',
                 selected
                   ? 'border-accent bg-accent-soft shadow-card'
                   : 'border-line hover:-translate-y-0.5 hover:border-line-strong hover:shadow-card',

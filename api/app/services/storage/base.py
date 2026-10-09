@@ -17,6 +17,16 @@ class BaseStorageService(ABC):
         pass
 
     @abstractmethod
+    def list_page(
+        self, prefix: str = "", limit: int = 500, cursor: Optional[str] = None
+    ) -> Tuple[List[FolderItem], List[ObjectMetadata], Optional[str]]:
+        """List one page of folders and objects at a prefix.
+
+        Returns (folders, objects, next_cursor); `next_cursor` is None on the last page.
+        """
+        pass
+
+    @abstractmethod
     def get_object_metadata(self, key: str) -> ObjectMetadata:
         """Get detailed metadata for a specific object key."""
         pass

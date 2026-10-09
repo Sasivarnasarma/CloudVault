@@ -112,7 +112,7 @@ describe('FilesPage', () => {
 
     expect(await screen.findByText('q1.pdf')).toBeInTheDocument();
     expect(window.location.search).toBe('?p=Reports');
-    expect(listMock).toHaveBeenLastCalledWith('Reports/');
+    expect(listMock).toHaveBeenLastCalledWith('Reports/', { limit: 500 });
     expect(screen.getByRole('navigation', { name: 'Folder path' })).toHaveTextContent('Reports');
     expect(screen.queryByText('report.pdf')).not.toBeInTheDocument();
   });
@@ -121,7 +121,7 @@ describe('FilesPage', () => {
     window.history.replaceState(null, '', '/?p=Reports');
     render(<FilesPage />);
     expect(await screen.findByText('q1.pdf')).toBeInTheDocument();
-    expect(listMock).toHaveBeenCalledWith('Reports/');
+    expect(listMock).toHaveBeenCalledWith('Reports/', { limit: 500 });
   });
 
   it('goes back to the root with the breadcrumb', async () => {
@@ -311,7 +311,7 @@ describe('FilesPage organize actions', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Move to…' });
     await user.click(await within(dialog).findByRole('button', { name: 'Reports' }));
-    await waitFor(() => expect(listMock).toHaveBeenLastCalledWith('Reports/'));
+    await waitFor(() => expect(listMock).toHaveBeenLastCalledWith('Reports/')); // the picker lists without paging
     await user.click(within(dialog).getByRole('button', { name: 'Move here' }));
 
     await waitFor(() => expect(moveObject).toHaveBeenCalledWith('report.pdf', 'Reports/report.pdf', false));
@@ -393,5 +393,27 @@ describe('FilesPage upload conflicts', () => {
     await user.click(await screen.findByRole('button', { name: 'Skip report.pdf' }));
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Uploads' })).not.toBeInTheDocument());
     expect(uploadFileDirect).not.toHaveBeenCalled();
+  });
+});
+
+describe('FilesPage large folders', () => {
+  it('loads further pages on demand and keeps the earlier ones', async () => {
+    const more = makeFile('zeta.txt', { content_type: 'text/plain' });
+    listMock.mockImplementation(async (_prefix = '', opts) =>
+      opts?.cursor
+        ? { ...makeListing('', [], [more]), next_cursor: null, has_more: false }
+        : { ...ROOT, next_cursor: 'c1', has_more: true },
+    );
+    const user = await renderPage();
+
+    expect(screen.getByText('Showing the first 5 items')).toBeInTheDocument();
+    expect(screen.getByText('2+ folders, 3+ files')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(await screen.findByText('zeta.txt')).toBeInTheDocument();
+    expect(screen.getByText('report.pdf')).toBeInTheDocument();
+    expect(listMock).toHaveBeenLastCalledWith('', { limit: 500, cursor: 'c1' });
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+    expect(screen.getByText('2 folders, 4 files')).toBeInTheDocument();
   });
 });

@@ -20,6 +20,7 @@ from app.services.storage.keys import normalize_key, normalize_prefix
 
 router = APIRouter(prefix="/objects", tags=["Objects"])
 
+DEFAULT_PAGE_SIZE = 500
 UPLOAD_URL_TTL_SECONDS = 900
 DOWNLOAD_URL_TTL_SECONDS = 3600
 
@@ -27,17 +28,29 @@ DOWNLOAD_URL_TTL_SECONDS = 3600
 @router.get("", response_model=ObjectListResponse)
 def list_objects(
     prefix: str = Query(default="", description="Folder key prefix filter"),
+    limit: Optional[int] = Query(
+        default=None, ge=1, le=1000, description="Page size. Omit to return everything in one response."
+    ),
+    cursor: Optional[str] = Query(default=None, max_length=2048, description="`next_cursor` from the previous page"),
     storage: BaseStorageService = Depends(get_storage_service),
 ):
-    """List objects and subfolders at a specific prefix."""
+    """List objects and subfolders at a specific prefix, optionally one page at a time."""
     clean_prefix = normalize_prefix(prefix)
-    folders, objects = storage.list_objects(prefix=clean_prefix)
+    next_cursor: Optional[str] = None
+    if limit is None and cursor is None:
+        folders, objects = storage.list_objects(prefix=clean_prefix)
+    else:
+        folders, objects, next_cursor = storage.list_page(
+            prefix=clean_prefix, limit=limit or DEFAULT_PAGE_SIZE, cursor=cursor
+        )
     return ObjectListResponse(
         prefix=clean_prefix,
         folders=folders,
         objects=objects,
         total_count=len(folders) + len(objects),
         total_size=sum(obj.size for obj in objects),
+        next_cursor=next_cursor,
+        has_more=next_cursor is not None,
     )
 
 

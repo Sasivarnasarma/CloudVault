@@ -138,24 +138,57 @@ class S3StorageService(BaseStorageService):
                         FolderItem(name=_extract_name_from_key(cp["Prefix"]), prefix=cp["Prefix"])
                     )
 
-                for obj in page.get("Contents", []):
-                    key = obj["Key"]
-                    # Skip the folder's own marker and nested 0-byte markers.
-                    if key == norm_prefix or key.endswith("/"):
-                        continue
-                    content_type, _ = mimetypes.guess_type(key)
-                    objects.append(
-                        ObjectMetadata(
-                            key=key,
-                            name=_extract_name_from_key(key),
-                            size=obj.get("Size", 0),
-                            content_type=content_type or "application/octet-stream",
-                            last_modified=obj["LastModified"],
-                            etag=obj.get("ETag", "").strip('"'),
-                        )
-                    )
+                objects.extend(self._to_objects(page.get("Contents", []), norm_prefix))
 
         return folders, objects
+
+    def list_page(
+        self, prefix: str = "", limit: int = 500, cursor: Optional[str] = None
+    ) -> Tuple[List[FolderItem], List[ObjectMetadata], Optional[str]]:
+        norm_prefix = normalize_prefix(prefix)
+        params = {"Bucket": self.bucket, "Prefix": norm_prefix, "Delimiter": "/", "MaxKeys": limit}
+        if cursor:
+            params["ContinuationToken"] = cursor
+
+        with _storage_errors("listing objects"):
+            try:
+                page = self.client.list_objects_v2(**params)
+            except ClientError as e:
+                status = e.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+                code = str(e.response.get("Error", {}).get("Code", ""))
+                # AWS reports InvalidArgument, R2 reports InvalidContinuation; both are a 400.
+                if cursor and (status == 400 or code in ("InvalidArgument", "InvalidContinuation")):
+                    raise InvalidKeyError("Invalid pagination cursor") from e
+                raise
+
+        folders = [
+            FolderItem(name=_extract_name_from_key(cp["Prefix"]), prefix=cp["Prefix"])
+            for cp in page.get("CommonPrefixes", [])
+        ]
+        objects = self._to_objects(page.get("Contents", []), norm_prefix)
+        next_cursor = page.get("NextContinuationToken") if page.get("IsTruncated") else None
+        return folders, objects, next_cursor
+
+    @staticmethod
+    def _to_objects(contents: List[dict], norm_prefix: str) -> List[ObjectMetadata]:
+        objects: List[ObjectMetadata] = []
+        for obj in contents:
+            key = obj["Key"]
+            # Skip the folder's own marker and nested 0-byte markers.
+            if key == norm_prefix or key.endswith("/"):
+                continue
+            content_type, _ = mimetypes.guess_type(key)
+            objects.append(
+                ObjectMetadata(
+                    key=key,
+                    name=_extract_name_from_key(key),
+                    size=obj.get("Size", 0),
+                    content_type=content_type or "application/octet-stream",
+                    last_modified=obj["LastModified"],
+                    etag=obj.get("ETag", "").strip('"'),
+                )
+            )
+        return objects
 
     def get_object_metadata(self, key: str) -> ObjectMetadata:
         norm_key = normalize_key(key)

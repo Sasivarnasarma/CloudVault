@@ -8,8 +8,19 @@ import type {
 } from '../types';
 import { jsonBody, request } from './http';
 
-export function listObjects(prefix = ''): Promise<ObjectListResponse> {
-  const query = prefix ? `?prefix=${encodeURIComponent(prefix)}` : '';
+export interface ListOptions {
+  /** Page size. Omit to load the whole folder in one request. */
+  limit?: number;
+  /** `next_cursor` of the previous page. */
+  cursor?: string;
+}
+
+export function listObjects(prefix = '', { limit, cursor }: ListOptions = {}): Promise<ObjectListResponse> {
+  const params: string[] = [];
+  if (prefix) params.push(`prefix=${encodeURIComponent(prefix)}`);
+  if (limit) params.push(`limit=${limit}`);
+  if (cursor) params.push(`cursor=${encodeURIComponent(cursor)}`);
+  const query = params.length > 0 ? `?${params.join('&')}` : '';
   return request(`/api/objects${query}`, undefined, 'Failed to fetch objects');
 }
 

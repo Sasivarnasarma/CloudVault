@@ -40,6 +40,23 @@ class FakeStorage(BaseStorageService):
             raise self.fail_with
         return [FolderItem(name="sub", prefix=prefix + "sub/")], []
 
+    def list_page(self, prefix: str = "", limit: int = 500, cursor: Optional[str] = None):
+        self.calls.append(("list_page", f"{prefix}|{limit}|{cursor}"))
+        if self.fail_with:
+            raise self.fail_with
+        start = int(cursor or 0)
+        names = [f"f{i:03}.txt" for i in range(5)]
+        chunk = names[start : start + limit]
+        objects = [
+            ObjectMetadata(
+                key=prefix + n, name=n, size=10, content_type="text/plain",
+                last_modified="2026-01-01T00:00:00Z", etag="e",
+            )
+            for n in chunk
+        ]
+        more = start + limit < len(names)
+        return [], objects, str(start + limit) if more else None
+
     def get_object_metadata(self, key: str) -> ObjectMetadata:
         if key not in self.existing:
             raise ObjectNotFoundError()
@@ -314,3 +331,32 @@ def test_folder_transfer_rejects_root_and_traversal_and_conflicts(client, action
         assert client.post(f"/api/folders/{action}", json={"source": bad, "destination": "docs2"}).status_code == 400
     taken = client.post(f"/api/folders/{action}", json={"source": "docs", "destination": "taken"})
     assert taken.status_code == 409
+
+
+def test_list_without_limit_keeps_returning_everything(client, storage):
+    body = client.get("/api/objects").json()
+    assert body["next_cursor"] is None and body["has_more"] is False
+    assert not any(name == "list_page" for name, _ in storage.calls)
+
+
+def test_list_pages_with_limit_and_cursor(client, storage):
+    first = client.get("/api/objects", params={"prefix": "/docs", "limit": 2}).json()
+    assert [o["name"] for o in first["objects"]] == ["f000.txt", "f001.txt"]
+    assert first["has_more"] is True and first["next_cursor"] == "2"
+    assert first["prefix"] == "docs/"
+    assert ("list_page", "docs/|2|None") in storage.calls
+
+    last = client.get("/api/objects", params={"prefix": "docs", "limit": 10, "cursor": "2"}).json()
+    assert [o["name"] for o in last["objects"]] == ["f002.txt", "f003.txt", "f004.txt"]
+    assert last["has_more"] is False and last["next_cursor"] is None
+    assert last["total_size"] == 30
+
+
+def test_cursor_alone_uses_the_default_page_size(client, storage):
+    client.get("/api/objects", params={"cursor": "1"})
+    assert ("list_page", "|500|1") in storage.calls
+
+
+@pytest.mark.parametrize("limit", ["0", "1001", "-5", "abc"])
+def test_list_rejects_invalid_limits(client, limit):
+    assert client.get("/api/objects", params={"limit": limit}).status_code == 422

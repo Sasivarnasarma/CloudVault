@@ -4,6 +4,7 @@ import { listObjects } from '../../services/objectService';
 import type { ObjectListResponse } from '../../types';
 
 const PATH_PARAM = 'p';
+export const PAGE_SIZE = 500;
 
 /** Folder prefix ('a/b/') stored in the URL as ?p=a/b, or '' for the root. */
 function readPrefixFromUrl(): string {
@@ -19,30 +20,86 @@ function urlForPrefix(prefix: string): string {
   return `${pathname}?${PATH_PARAM}=${path}${hash}`;
 }
 
+/** Append a freshly loaded page to what is already shown. */
+function mergePage(current: ObjectListResponse, page: ObjectListResponse): ObjectListResponse {
+  const folders = [...current.folders];
+  const objects = [...current.objects];
+  const seenFolders = new Set(folders.map((f) => f.prefix));
+  const seenObjects = new Set(objects.map((o) => o.key));
+  for (const folder of page.folders) if (!seenFolders.has(folder.prefix)) folders.push(folder);
+  for (const object of page.objects) if (!seenObjects.has(object.key)) objects.push(object);
+
+  return {
+    ...page,
+    folders,
+    objects,
+    total_count: folders.length + objects.length,
+    total_size: objects.reduce((sum, o) => sum + o.size, 0),
+  };
+}
+
 export function useObjects() {
   const [currentPrefix, setCurrentPrefix] = useState<string>(readPrefixFromUrl);
   const [data, setData] = useState<ObjectListResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
   // Always points at the folder being viewed, so late callbacks refresh the right listing.
   const prefixRef = useRef(currentPrefix);
   // Incremented per request; only the latest response may update state.
   const latestRequest = useRef(0);
+  const cursorRef = useRef<string | null>(null);
+  const loadingMoreRef = useRef(false);
 
   const fetchListing = useCallback(async (prefix: string) => {
     const requestId = ++latestRequest.current;
+    cursorRef.current = null;
+    loadingMoreRef.current = false;
     setLoading(true);
     setError(null);
+    setHasMore(false);
+    setLoadingMore(false);
+    setLoadMoreError(null);
     try {
-      const result = await listObjects(prefix);
-      if (requestId === latestRequest.current) setData(result);
+      const result = await listObjects(prefix, { limit: PAGE_SIZE });
+      if (requestId !== latestRequest.current) return;
+      cursorRef.current = result.next_cursor ?? null;
+      setHasMore(!!result.has_more);
+      setData(result);
     } catch (err) {
       if (requestId === latestRequest.current) {
         setError(errorMessage(err, 'Failed to load storage objects'));
       }
     } finally {
       if (requestId === latestRequest.current) setLoading(false);
+    }
+  }, []);
+
+  const loadMore = useCallback(async () => {
+    const cursor = cursorRef.current;
+    if (!cursor || loadingMoreRef.current) return;
+    const requestId = latestRequest.current;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    setLoadMoreError(null);
+    try {
+      const page = await listObjects(prefixRef.current, { limit: PAGE_SIZE, cursor });
+      if (requestId !== latestRequest.current) return; // the user moved on or refreshed
+      cursorRef.current = page.next_cursor ?? null;
+      setHasMore(!!page.has_more);
+      setData((prev) => (prev ? mergePage(prev, page) : page));
+    } catch (err) {
+      if (requestId === latestRequest.current) {
+        setLoadMoreError(errorMessage(err, 'Failed to load more items'));
+      }
+    } finally {
+      if (requestId === latestRequest.current) {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      }
     }
   }, []);
 
@@ -81,6 +138,10 @@ export function useObjects() {
     data,
     loading,
     error,
+    hasMore,
+    loadingMore,
+    loadMoreError,
+    loadMore,
     navigateToFolder,
     navigateUp,
     refetch,

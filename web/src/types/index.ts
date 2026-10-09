@@ -27,6 +27,9 @@ export interface ObjectListResponse {
   objects: FileObject[];
   total_count: number;
   total_size: number;
+  /** Present when the listing was requested one page at a time. */
+  next_cursor?: string | null;
+  has_more?: boolean;
 }
 
 export interface PresignUploadResponse {

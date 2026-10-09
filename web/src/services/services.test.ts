@@ -71,6 +71,11 @@ describe('objectService', () => {
     expect(lastCall().url).toBe('/api/objects');
     await listObjects('my docs/a&b/');
     expect(lastCall().url).toBe('/api/objects?prefix=my%20docs%2Fa%26b%2F');
+
+    await listObjects('docs/', { limit: 500 });
+    expect(lastCall().url).toBe('/api/objects?prefix=docs%2F&limit=500');
+    await listObjects('', { limit: 500, cursor: 'a/b==' });
+    expect(lastCall().url).toBe('/api/objects?limit=500&cursor=a%2Fb%3D%3D');
   });
 
   it('encodes keys for metadata and delete requests', async () => {
