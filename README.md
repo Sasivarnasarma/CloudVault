@@ -46,8 +46,8 @@ The app serves on `http://localhost:5173` and proxies `/api` to the backend.
 ### Tests
 
 ```bash
-cd api
-uv run pytest
+cd api && uv run pytest     # backend
+cd web && pnpm test         # frontend (Vitest + Testing Library)
 ```
 
 ## Deployment notes
