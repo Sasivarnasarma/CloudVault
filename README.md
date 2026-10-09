@@ -43,6 +43,13 @@ pnpm dev
 
 The app serves on `http://localhost:5173` and proxies `/api` to the backend.
 
+### Tests
+
+```bash
+cd api
+uv run pytest
+```
+
 ## Deployment notes
 
 The frontend calls the API under `/api` on its own origin. In production, serve
