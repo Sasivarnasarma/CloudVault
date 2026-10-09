@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { entryDragData } from '../../test/dataTransfer';
 import { Breadcrumbs } from './Breadcrumbs';
 import { Button, IconButton } from './Button';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -34,6 +35,42 @@ describe('Breadcrumbs', () => {
     render(<Breadcrumbs currentPrefix="" rootLabel="All files" onNavigate={() => {}} />);
     expect(screen.getAllByRole('button')).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'All files' })).toHaveAttribute('aria-current', 'page');
+  });
+});
+
+describe('Breadcrumbs as drop targets', () => {
+  const setup = (dragActive: boolean, currentPrefix = 'docs/2026/q1/') => {
+    const onDropToPrefix = vi.fn();
+    render(<Breadcrumbs currentPrefix={currentPrefix} rootLabel="All files" onNavigate={() => {}} dragActive={dragActive} onDropToPrefix={onDropToPrefix} />);
+    return onDropToPrefix;
+  };
+  const drop = (name: string) => fireEvent.drop(screen.getByRole('button', { name }), { dataTransfer: entryDragData() });
+
+  it('accepts drops on the root and on every parent folder', () => {
+    const onDropToPrefix = setup(true);
+    drop('All files');
+    drop('docs');
+    drop('2026');
+    expect(onDropToPrefix.mock.calls).toEqual([[''], ['docs/'], ['docs/2026/']]);
+  });
+
+  it('does not accept a drop on the folder you are already in', () => {
+    const onDropToPrefix = setup(true);
+    drop('q1');
+    expect(onDropToPrefix).not.toHaveBeenCalled();
+  });
+
+  it('highlights the folder under the pointer', () => {
+    setup(true);
+    fireEvent.dragEnter(screen.getByRole('button', { name: 'docs' }), { dataTransfer: entryDragData() });
+    expect(screen.getByRole('button', { name: 'docs' })).toHaveClass('ring-2');
+    expect(screen.getByRole('button', { name: 'q1' })).not.toHaveClass('ring-2');
+  });
+
+  it('ignores drops when nothing is being dragged', () => {
+    const onDropToPrefix = setup(false);
+    drop('docs');
+    expect(onDropToPrefix).not.toHaveBeenCalled();
   });
 });
 

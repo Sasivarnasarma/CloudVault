@@ -1,7 +1,9 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { ArrowDownUp, ArrowUp, Check, LayoutGrid, List, Menu, RefreshCw, Search, X } from 'lucide-react';
 import type { RefObject } from 'react';
+import { useDropTarget } from '../../hooks/useDropTarget';
 import { cn } from '../../lib/cn';
+import { parentPrefix } from '../../lib/paths';
 import type { SortDir, SortKey } from '../../lib/entries';
 import type { ViewMode } from '../../features/files/FileBrowser';
 import { Breadcrumbs } from '../common/Breadcrumbs';
@@ -22,6 +24,9 @@ interface ToolbarProps {
   onSortChange: (key: SortKey, dir?: SortDir) => void;
   onRefresh: () => void;
   onOpenNav: () => void;
+  /** True while entries are being dragged (the path and the up button become drop targets). */
+  dragActive?: boolean;
+  onDropToPrefix?: (prefix: string) => void;
 }
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
@@ -34,6 +39,24 @@ const menuClass = 'z-50 min-w-44 rounded-xl border border-line bg-surface-2 p-1.
 const menuItemClass =
   'flex cursor-pointer select-none items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-ink outline-none data-[highlighted]:bg-sunken';
 
+function UpButton({ currentPrefix, dragActive, onNavigateUp, onDropToPrefix }: Pick<ToolbarProps, 'currentPrefix' | 'dragActive' | 'onNavigateUp' | 'onDropToPrefix'>) {
+  const drop = useDropTarget({
+    enabled: !!dragActive && !!currentPrefix && !!onDropToPrefix,
+    onDrop: () => onDropToPrefix?.(parentPrefix(currentPrefix)),
+  });
+  return (
+    <IconButton
+      label="Up one folder"
+      onClick={onNavigateUp}
+      disabled={!currentPrefix}
+      {...drop.handlers}
+      className={cn(drop.over && 'bg-accent-soft text-accent ring-2 ring-accent')}
+    >
+      <ArrowUp className="size-4" />
+    </IconButton>
+  );
+}
+
 export function Toolbar(props: ToolbarProps) {
   const { view, sort, search } = props;
 
@@ -43,10 +66,19 @@ export function Toolbar(props: ToolbarProps) {
         <IconButton label="Open navigation" className="lg:hidden" onClick={props.onOpenNav}>
           <Menu className="size-5" />
         </IconButton>
-        <IconButton label="Up one folder" onClick={props.onNavigateUp} disabled={!props.currentPrefix}>
-          <ArrowUp className="size-4" />
-        </IconButton>
-        <Breadcrumbs currentPrefix={props.currentPrefix} rootLabel={props.rootLabel} onNavigate={props.onNavigate} />
+        <UpButton
+          currentPrefix={props.currentPrefix}
+          dragActive={props.dragActive}
+          onNavigateUp={props.onNavigateUp}
+          onDropToPrefix={props.onDropToPrefix}
+        />
+        <Breadcrumbs
+          currentPrefix={props.currentPrefix}
+          rootLabel={props.rootLabel}
+          onNavigate={props.onNavigate}
+          dragActive={props.dragActive}
+          onDropToPrefix={props.onDropToPrefix}
+        />
         <IconButton label="Refresh" onClick={props.onRefresh}>
           <RefreshCw className={cn('size-4', props.refreshing && 'animate-spin')} />
         </IconButton>

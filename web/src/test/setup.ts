@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, configure } from '@testing-library/react';
+import { toast } from 'sonner';
 import { afterEach } from 'vitest';
 
 // Generous so the suite stays stable when many jsdom workers run in parallel.
@@ -7,6 +8,7 @@ configure({ asyncUtilTimeout: 5000 });
 
 afterEach(() => {
   cleanup();
+  toast.dismiss(); // sonner keeps its toasts globally, so one test's would leak into the next
   window.history.replaceState(null, '', '/');
 });
 

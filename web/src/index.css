@@ -112,3 +112,27 @@
     scrollbar-color: var(--line-strong) transparent;
   }
 }
+
+/* Entrance animations for listed items. Plain CSS (not motion) so rows stay free for HTML5 drag & drop. */
+@keyframes cv-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes cv-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

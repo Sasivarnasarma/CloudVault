@@ -1,7 +1,8 @@
 import { createRef } from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { entryDragData } from '../../test/dataTransfer';
 import type { HealthResponse } from '../../types';
 import { Sidebar } from './Sidebar';
 import { Toolbar } from './Toolbar';
@@ -155,5 +156,50 @@ describe('Toolbar', () => {
     expect(onNavigate).toHaveBeenCalledWith('');
     await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     expect(onRefresh).toHaveBeenCalled();
+  });
+});
+
+describe('Toolbar drop targets', () => {
+  const setup = (currentPrefix: string, dragActive: boolean) => {
+    const onDropToPrefix = vi.fn();
+    render(
+      <Toolbar
+        currentPrefix={currentPrefix}
+        rootLabel="All files"
+        search=""
+        searchRef={createRef<HTMLInputElement>()}
+        view="grid"
+        sort={{ key: 'name', dir: 'asc' }}
+        refreshing={false}
+        onNavigate={vi.fn()}
+        onNavigateUp={vi.fn()}
+        onSearchChange={vi.fn()}
+        onViewChange={vi.fn()}
+        onSortChange={vi.fn()}
+        onRefresh={vi.fn()}
+        onOpenNav={vi.fn()}
+        dragActive={dragActive}
+        onDropToPrefix={onDropToPrefix}
+      />,
+    );
+    return onDropToPrefix;
+  };
+
+  it('moves dropped items to the parent folder when released on the up button', () => {
+    const onDropToPrefix = setup('docs/2026/', true);
+    fireEvent.drop(screen.getByRole('button', { name: 'Up one folder' }), { dataTransfer: entryDragData() });
+    expect(onDropToPrefix).toHaveBeenCalledWith('docs/');
+  });
+
+  it('uses the root as the parent of a top-level folder', () => {
+    const onDropToPrefix = setup('docs/', true);
+    fireEvent.drop(screen.getByRole('button', { name: 'Up one folder' }), { dataTransfer: entryDragData() });
+    expect(onDropToPrefix).toHaveBeenCalledWith('');
+  });
+
+  it('ignores drops at the root and when nothing is being dragged', () => {
+    const atRoot = setup('', true);
+    fireEvent.drop(screen.getByRole('button', { name: 'Up one folder' }), { dataTransfer: entryDragData() });
+    expect(atRoot).not.toHaveBeenCalled();
   });
 });

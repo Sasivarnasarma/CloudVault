@@ -34,6 +34,10 @@ function renderBrowser(overrides: Partial<React.ComponentProps<typeof FileBrowse
     onSelectRange: vi.fn(),
     onSelectAll: vi.fn(),
     onClearSelection: vi.fn(),
+    dragIds: null as string[] | null,
+    onDragStart: vi.fn(),
+    onDragEnd: vi.fn(),
+    onDropOnFolder: vi.fn(),
     onSortChange: vi.fn(),
   };
   render(

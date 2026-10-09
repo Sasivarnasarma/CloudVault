@@ -1,13 +1,46 @@
 import { ChevronRight } from 'lucide-react';
+import { useDropTarget } from '../../hooks/useDropTarget';
 import { cn } from '../../lib/cn';
 
 interface BreadcrumbsProps {
   currentPrefix: string;
   rootLabel: string;
   onNavigate: (prefix: string) => void;
+  /** True while entries are being dragged, which turns the parent folders into drop targets. */
+  dragActive?: boolean;
+  /** Entries were dropped on one of the folders in the path. */
+  onDropToPrefix?: (prefix: string) => void;
 }
 
-export function Breadcrumbs({ currentPrefix, rootLabel, onNavigate }: BreadcrumbsProps) {
+interface CrumbProps {
+  label: string;
+  prefix: string;
+  current: boolean;
+  dropEnabled: boolean;
+  onNavigate: (prefix: string) => void;
+  onDropToPrefix?: (prefix: string) => void;
+}
+
+function Crumb({ label, prefix, current, dropEnabled, onNavigate, onDropToPrefix }: CrumbProps) {
+  const drop = useDropTarget({ enabled: dropEnabled, onDrop: () => onDropToPrefix?.(prefix) });
+  return (
+    <button
+      type="button"
+      onClick={() => onNavigate(prefix)}
+      aria-current={current ? 'page' : undefined}
+      {...drop.handlers}
+      className={cn(
+        'max-w-48 truncate rounded-md px-2 py-1 text-sm transition',
+        current ? 'font-semibold text-ink' : 'text-ink-3 hover:bg-sunken hover:text-ink',
+        drop.over && 'bg-accent-soft text-accent ring-2 ring-accent',
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+export function Breadcrumbs({ currentPrefix, rootLabel, onNavigate, dragActive = false, onDropToPrefix }: BreadcrumbsProps) {
   const parts = currentPrefix ? currentPrefix.replace(/\/+$/, '').split('/') : [];
   const crumbs = [
     { label: rootLabel, prefix: '' },
@@ -22,17 +55,15 @@ export function Breadcrumbs({ currentPrefix, rootLabel, onNavigate }: Breadcrumb
           return (
             <li key={crumb.prefix} className="flex shrink-0 items-center gap-0.5">
               {i > 0 && <ChevronRight className="size-3.5 text-ink-3" aria-hidden="true" />}
-              <button
-                type="button"
-                onClick={() => onNavigate(crumb.prefix)}
-                aria-current={isLast ? 'page' : undefined}
-                className={cn(
-                  'max-w-48 truncate rounded-md px-2 py-1 text-sm transition',
-                  isLast ? 'font-semibold text-ink' : 'text-ink-3 hover:bg-sunken hover:text-ink',
-                )}
-              >
-                {crumb.label}
-              </button>
+              <Crumb
+                label={crumb.label}
+                prefix={crumb.prefix}
+                current={isLast}
+                // Dropping on the folder you are already in would change nothing.
+                dropEnabled={dragActive && !isLast && !!onDropToPrefix}
+                onNavigate={onNavigate}
+                onDropToPrefix={onDropToPrefix}
+              />
             </li>
           );
         })}

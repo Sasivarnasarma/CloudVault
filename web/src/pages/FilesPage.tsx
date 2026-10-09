@@ -17,7 +17,14 @@ import { TransferDialog, type TransferTarget } from '../features/files/TransferD
 import { CreateFolderModal } from '../features/folders/CreateFolderModal';
 import { UploadTray } from '../features/upload/UploadTray';
 import { useFileDrop } from '../features/upload/useFileDrop';
-import { deleteEntry, describeEntries, runBulk, summarize, type BulkResult } from '../features/files/bulkActions';
+import {
+  deleteEntry,
+  describeEntries,
+  runBulk,
+  summarize,
+  transferEntry,
+  type BulkResult,
+} from '../features/files/bulkActions';
 import { useObjects } from '../features/files/useObjects';
 import { useSelection } from '../features/files/useSelection';
 import { useTheme } from '../hooks/useTheme';
@@ -89,6 +96,8 @@ export function FilesPage() {
   const [bulkDelete, setBulkDelete] = useState<Entry[] | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkTransfer, setBulkTransfer] = useState<BulkTransferTarget | null>(null);
+  const [dragIds, setDragIds] = useState<string[] | null>(null);
+  const [movingIds, setMovingIds] = useState<string[]>([]);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -271,13 +280,49 @@ export function FilesPage() {
     refetch();
   };
 
-  const handleBulkTransferDone = (mode: 'move' | 'copy', results: BulkResult[]) => {
+  /** `toastId` is a loading toast to turn into the result, so the user sees one message from start to finish. */
+  const handleBulkTransferDone = (mode: 'move' | 'copy', results: BulkResult[], toastId?: string | number) => {
     const { succeeded, failed } = summarize(results);
     const verb = mode === 'move' ? 'Moved' : 'Copied';
-    if (succeeded.length > 0) toast.success(`${verb} ${describeEntries(succeeded.map((r) => r.entry))}`);
-    if (failed.length > 0 && succeeded.length === 0) toast.error(`Couldn’t ${mode} any of the ${results.length} items`);
+    let idUsed = false;
+    const take = () => {
+      if (idUsed) return undefined;
+      idUsed = true;
+      return toastId;
+    };
+    if (succeeded.length > 0) toast.success(`${verb} ${describeEntries(succeeded.map((r) => r.entry))}`, { id: take() });
+    if (failed.length > 0) {
+      const what =
+        results.length === 1
+          ? `“${failed[0].entry.name}”`
+          : failed.length === results.length
+            ? `any of the ${results.length} items`
+            : `${failed.length} of ${results.length} items`;
+      toast.error(`Couldn’t ${mode} ${what}`, { description: failed[0].error, id: take() });
+    }
+    if (toastId !== undefined && !idUsed) toast.dismiss(toastId);
     selection.replace(failed.map((r) => r.entry.id));
     refetch();
+  };
+
+  /** Entries dragged onto a folder (a tile, the path above the list, or the up button): move them there. */
+  const moveDragged = async (destinationPrefix: string) => {
+    const ids = dragIds ?? [];
+    setDragIds(null);
+    const moving = allEntries.filter((e) => ids.includes(e.id));
+    if (moving.length === 0 || destinationPrefix === currentPrefix) return;
+
+    // Show progress straight away: a spinner on the items and a loading toast that the result replaces.
+    setMovingIds(moving.map((e) => e.id));
+    const toastId = toast.loading(`Moving ${describeEntries(moving)}…`);
+    try {
+      const results = await runBulk(moving, (entry) => transferEntry(entry, 'move', destinationPrefix, false));
+      handleBulkTransferDone('move', results, toastId);
+    } catch (err) {
+      toast.error(errorMessage(err, 'Couldn’t move the items'), { id: toastId });
+    } finally {
+      setMovingIds([]);
+    }
   };
 
   // Keyboard: "/" focuses search, Escape clears the selection, Ctrl/Cmd+A selects everything shown,
@@ -384,6 +429,8 @@ export function FilesPage() {
             refetch();
           }}
           onOpenNav={() => setNavOpen(true)}
+          dragActive={dragIds !== null}
+          onDropToPrefix={moveDragged}
         />
 
         <div className="relative flex min-h-0 flex-1">
@@ -424,6 +471,11 @@ export function FilesPage() {
                 onSelectRange={selection.selectRange}
                 onSelectAll={selection.selectAll}
                 onClearSelection={selection.clear}
+                dragIds={dragIds}
+                busyIds={movingIds}
+                onDragStart={setDragIds}
+                onDragEnd={() => setDragIds(null)}
+                onDropOnFolder={moveDragged}
                 onDownload={handleDownload}
                 onDelete={setPendingDelete}
                 onTransfer={(entry, mode) => setTransfer({ entry, mode })}

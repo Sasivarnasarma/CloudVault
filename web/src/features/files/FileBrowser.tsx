@@ -7,18 +7,20 @@ import {
   FolderInput,
   FolderOpen,
   Info,
+  Loader2,
   Minus,
   Pencil,
   Trash2,
 } from 'lucide-react';
-import { motion } from 'motion/react';
-import type { MouseEvent } from 'react';
+import type { DragEvent, MouseEvent } from 'react';
 import { EntryContextMenu, EntryMoreMenu, type MenuItem } from '../../components/common/EntryMenu';
 import { cn } from '../../lib/cn';
+import { setEntryDrag } from '../../lib/dragMove';
 import type { Entry, SortDir, SortKey, TransferMode } from '../../lib/entries';
 import { kindLabel } from '../../lib/fileKind';
 import { formatBytes, formatDate, formatRelativeDate } from '../../lib/formatters';
 import { FileIcon, FolderIcon } from './FileIcon';
+import { useDropTarget } from '../../hooks/useDropTarget';
 
 export type ViewMode = 'grid' | 'list';
 
@@ -35,7 +37,18 @@ export interface EntryHandlers {
   onTransfer: (entry: Entry, mode: TransferMode) => void;
 }
 
-interface FileBrowserProps extends EntryHandlers {
+export interface DragHandlers {
+  /** Ids of the entries being dragged right now, or null when nothing is. */
+  dragIds: readonly string[] | null;
+  /** Ids of entries that are being moved right now; they show a spinner and can't be dragged again. */
+  busyIds?: readonly string[];
+  onDragStart: (ids: string[]) => void;
+  onDragEnd: () => void;
+  /** The dragged entries were dropped on this folder. */
+  onDropOnFolder: (prefix: string) => void;
+}
+
+interface FileBrowserProps extends EntryHandlers, DragHandlers {
   entries: Entry[];
   view: ViewMode;
   selection: ReadonlySet<string>;
@@ -74,6 +87,31 @@ function handleClick(e: MouseEvent, entry: Entry, h: EntryHandlers) {
   else h.onSelectFile(entry.id);
 }
 
+/** Drag source + (for folders) drop target behaviour of one entry. */
+function useEntryDnd(entry: Entry, selection: ReadonlySet<string>, d: DragHandlers) {
+  const dragging = d.dragIds?.includes(entry.id) ?? false;
+  const busy = d.busyIds?.includes(entry.id) ?? false;
+  // A folder accepts drops of anything except itself.
+  const accepts = entry.type === 'folder' && d.dragIds !== null && !dragging;
+  const drop = useDropTarget({
+    enabled: accepts,
+    onDrop: () => entry.type === 'folder' && d.onDropOnFolder(entry.folder.prefix),
+  });
+
+  const dragProps = {
+    draggable: !busy,
+    onDragStart: (e: DragEvent) => {
+      // Dragging part of a multi-selection moves the whole selection; otherwise just this item.
+      const ids = selection.has(entry.id) ? [...selection] : [entry.id];
+      setEntryDrag(e, ids);
+      d.onDragStart(ids);
+    },
+    onDragEnd: d.onDragEnd,
+  };
+
+  return { dragging, busy, over: drop.over, dropHandlers: drop.handlers, dragProps };
+}
+
 function SelectBox({
   checked,
   indeterminate = false,
@@ -110,61 +148,139 @@ function SelectBox({
   );
 }
 
-type ViewProps = Omit<FileBrowserProps, 'view'>;
+interface ItemProps {
+  entry: Entry;
+  index: number;
+  selected: boolean;
+  selection: ReadonlySet<string>;
+  handlers: EntryHandlers;
+  drag: DragHandlers;
+}
 
-function GridView({ entries, selection, ...h }: ViewProps) {
+function GridTile({ entry, index, selected, selection, handlers: h, drag }: ItemProps) {
+  const items = menuFor(entry, h);
+  const dnd = useEntryDnd(entry, selection, drag);
   const anySelected = selection.size > 0;
+
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-3 p-5">
-      {entries.map((entry, i) => {
-        const items = menuFor(entry, h);
-        const selected = selection.has(entry.id);
-        return (
-          <EntryContextMenu key={entry.id} items={items}>
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.22, delay: Math.min(i * 0.015, 0.2) }}
-              className={cn(
-                'group relative select-none rounded-2xl border bg-surface transition [contain-intrinsic-size:auto_9rem] [content-visibility:auto]',
-                selected
-                  ? 'border-accent bg-accent-soft shadow-card'
-                  : 'border-line hover:-translate-y-0.5 hover:border-line-strong hover:shadow-card',
-              )}
-            >
-              <button
-                type="button"
-                onClick={(e) => handleClick(e, entry, h)}
-                onDoubleClick={() => entry.type === 'file' && h.onDownload(entry.file.key, entry.name)}
-                aria-pressed={entry.type === 'file' ? selected : undefined}
-                className="flex w-full flex-col items-start rounded-2xl p-4 text-left"
-              >
-                <span className="mb-5">
-                  {entry.type === 'folder' ? <FolderIcon size="md" /> : <FileIcon file={entry.file} size="md" />}
-                </span>
-                <span className="w-full truncate text-sm font-medium text-ink" title={entry.name}>
-                  {entry.name}
-                </span>
-                <span className="mt-0.5 text-xs text-ink-3">
-                  {entry.type === 'folder' ? 'Folder' : `${formatBytes(entry.file.size, 1)} · ${kindLabel(entry.file)}`}
-                </span>
-              </button>
-              <div
-                className={cn(
-                  'absolute left-2.5 top-2.5 transition focus-within:opacity-100 group-hover:opacity-100',
-                  selected || anySelected ? 'opacity-100' : 'opacity-0',
-                )}
-              >
-                <SelectBox checked={selected} label={`Select ${entry.name}`} onChange={() => h.onToggleSelect(entry.id)} />
-              </div>
-              <div className="absolute right-2 top-2 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
-                <EntryMoreMenu items={items} label={entry.name} />
-              </div>
-            </motion.div>
-          </EntryContextMenu>
-        );
-      })}
-    </div>
+    <EntryContextMenu items={items}>
+      <div
+        {...dnd.dragProps}
+        {...dnd.dropHandlers}
+        style={{ animationDelay: `${Math.min(index * 15, 200)}ms` }}
+        className={cn(
+          'group relative select-none rounded-2xl border bg-surface transition [animation:cv-rise_0.22s_ease-out_backwards] [contain-intrinsic-size:auto_9rem] [content-visibility:auto]',
+          selected
+            ? 'border-accent bg-accent-soft shadow-card'
+            : 'border-line hover:-translate-y-0.5 hover:border-line-strong hover:shadow-card',
+          dnd.dragging && 'opacity-40',
+          dnd.busy && 'pointer-events-none',
+          dnd.over && 'border-accent bg-accent-soft ring-2 ring-accent',
+        )}
+        aria-busy={dnd.busy || undefined}
+      >
+        <button
+          type="button"
+          onClick={(e) => handleClick(e, entry, h)}
+          onDoubleClick={() => entry.type === 'file' && h.onDownload(entry.file.key, entry.name)}
+          aria-pressed={entry.type === 'file' ? selected : undefined}
+          className="flex w-full flex-col items-start rounded-2xl p-4 text-left"
+        >
+          <span className="mb-5">
+            {entry.type === 'folder' ? <FolderIcon size="md" /> : <FileIcon file={entry.file} size="md" />}
+          </span>
+          <span className="w-full truncate text-sm font-medium text-ink" title={entry.name}>
+            {entry.name}
+          </span>
+          <span className="mt-0.5 text-xs text-ink-3">
+            {entry.type === 'folder' ? 'Folder' : `${formatBytes(entry.file.size, 1)} · ${kindLabel(entry.file)}`}
+          </span>
+        </button>
+        <div
+          className={cn(
+            'absolute left-2.5 top-2.5 transition focus-within:opacity-100 group-hover:opacity-100',
+            selected || anySelected ? 'opacity-100' : 'opacity-0',
+          )}
+        >
+          <SelectBox checked={selected} label={`Select ${entry.name}`} onChange={() => h.onToggleSelect(entry.id)} />
+        </div>
+        <div className="absolute right-2 top-2 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+          <EntryMoreMenu items={items} label={entry.name} />
+        </div>
+        {dnd.busy && (
+          <div
+            role="status"
+            aria-label={`Moving ${entry.name}`}
+            className="absolute inset-0 grid place-items-center rounded-2xl bg-surface/70 text-accent backdrop-blur-[1px]"
+          >
+            <Loader2 className="size-6 animate-spin" />
+          </div>
+        )}
+      </div>
+    </EntryContextMenu>
+  );
+}
+
+function ListRow({ entry, index, selected, selection, handlers: h, drag }: ItemProps) {
+  const items = menuFor(entry, h);
+  const dnd = useEntryDnd(entry, selection, drag);
+
+  return (
+    <EntryContextMenu items={items}>
+      <tr
+        {...dnd.dragProps}
+        {...dnd.dropHandlers}
+        style={{ animationDelay: `${Math.min(index * 12, 150)}ms` }}
+        className={cn(
+          'group select-none border-b border-line/60 transition [animation:cv-fade_0.2s_ease-out_backwards]',
+          selected ? 'bg-accent-soft' : 'hover:bg-surface',
+          dnd.dragging && 'opacity-40',
+          dnd.busy && 'pointer-events-none opacity-60',
+          dnd.over && 'bg-accent-soft outline outline-2 -outline-offset-2 outline-accent',
+        )}
+        aria-busy={dnd.busy || undefined}
+      >
+        <td className="pl-5">
+          <SelectBox
+            checked={selected}
+            label={`Select ${entry.name}`}
+            onChange={() => h.onToggleSelect(entry.id)}
+            className={cn(!selected && selection.size === 0 && 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100')}
+          />
+        </td>
+        <td className="py-1.5 pl-2 pr-4">
+          <button
+            type="button"
+            onClick={(e) => handleClick(e, entry, h)}
+            onDoubleClick={() => entry.type === 'file' && h.onDownload(entry.file.key, entry.name)}
+            aria-pressed={entry.type === 'file' ? selected : undefined}
+            className="flex w-full min-w-0 items-center gap-3 rounded-lg py-1 text-left"
+          >
+            {entry.type === 'folder' ? <FolderIcon size="sm" /> : <FileIcon file={entry.file} size="sm" />}
+            <span className="truncate font-medium text-ink" title={entry.name}>
+              {entry.name}
+            </span>
+          </button>
+        </td>
+        <td className="hidden px-4 text-ink-3 md:table-cell" title={entry.type === 'file' ? formatDate(entry.file.last_modified) : undefined}>
+          {entry.type === 'file' ? formatRelativeDate(entry.file.last_modified) : '—'}
+        </td>
+        <td className="hidden px-4 font-mono text-xs text-ink-3 sm:table-cell">
+          {entry.type === 'file' ? formatBytes(entry.file.size, 1) : '—'}
+        </td>
+        <td className="px-2 text-right">
+          {dnd.busy ? (
+            <span role="status" aria-label={`Moving ${entry.name}`} className="inline-flex size-8 items-center justify-center text-accent">
+              <Loader2 className="size-4 animate-spin" />
+            </span>
+          ) : (
+            <div className="opacity-0 transition focus-within:opacity-100 group-hover:opacity-100 max-sm:opacity-100">
+              <EntryMoreMenu items={items} label={entry.name} />
+            </div>
+          )}
+        </td>
+      </tr>
+    </EntryContextMenu>
   );
 }
 
@@ -201,7 +317,34 @@ function SortHeader({
   );
 }
 
-function ListView({ entries, selection, sort, onSortChange, onSelectAll, onClearSelection, ...h }: ViewProps) {
+export function FileBrowser(props: FileBrowserProps) {
+  const {
+    entries,
+    view,
+    selection,
+    sort,
+    onSortChange,
+    onSelectAll,
+    onClearSelection,
+    dragIds,
+    busyIds,
+    onDragStart,
+    onDragEnd,
+    onDropOnFolder,
+    ...handlers
+  } = props;
+  const drag: DragHandlers = { dragIds, busyIds, onDragStart, onDragEnd, onDropOnFolder };
+
+  if (view === 'grid') {
+    return (
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-3 p-5">
+        {entries.map((entry, i) => (
+          <GridTile key={entry.id} entry={entry} index={i} selected={selection.has(entry.id)} selection={selection} handlers={handlers} drag={drag} />
+        ))}
+      </div>
+    );
+  }
+
   const selectedCount = entries.filter((e) => selection.has(e.id)).length;
   const allSelected = entries.length > 0 && selectedCount === entries.length;
 
@@ -226,62 +369,10 @@ function ListView({ entries, selection, sort, onSortChange, onSelectAll, onClear
         </tr>
       </thead>
       <tbody>
-        {entries.map((entry, i) => {
-          const items = menuFor(entry, h);
-          const selected = selection.has(entry.id);
-          return (
-            <EntryContextMenu key={entry.id} items={items}>
-              <motion.tr
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.2, delay: Math.min(i * 0.012, 0.15) }}
-                className={cn(
-                  'group select-none border-b border-line/60 transition',
-                  selected ? 'bg-accent-soft' : 'hover:bg-surface',
-                )}
-              >
-                <td className="pl-5">
-                  <SelectBox
-                    checked={selected}
-                    label={`Select ${entry.name}`}
-                    onChange={() => h.onToggleSelect(entry.id)}
-                    className={cn(!selected && selection.size === 0 && 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100')}
-                  />
-                </td>
-                <td className="py-1.5 pl-2 pr-4">
-                  <button
-                    type="button"
-                    onClick={(e) => handleClick(e, entry, h)}
-                    onDoubleClick={() => entry.type === 'file' && h.onDownload(entry.file.key, entry.name)}
-                    aria-pressed={entry.type === 'file' ? selected : undefined}
-                    className="flex w-full min-w-0 items-center gap-3 rounded-lg py-1 text-left"
-                  >
-                    {entry.type === 'folder' ? <FolderIcon size="sm" /> : <FileIcon file={entry.file} size="sm" />}
-                    <span className="truncate font-medium text-ink" title={entry.name}>
-                      {entry.name}
-                    </span>
-                  </button>
-                </td>
-                <td className="hidden px-4 text-ink-3 md:table-cell" title={entry.type === 'file' ? formatDate(entry.file.last_modified) : undefined}>
-                  {entry.type === 'file' ? formatRelativeDate(entry.file.last_modified) : '—'}
-                </td>
-                <td className="hidden px-4 font-mono text-xs text-ink-3 sm:table-cell">
-                  {entry.type === 'file' ? formatBytes(entry.file.size, 1) : '—'}
-                </td>
-                <td className="px-2 text-right">
-                  <div className="opacity-0 transition focus-within:opacity-100 group-hover:opacity-100 max-sm:opacity-100">
-                    <EntryMoreMenu items={items} label={entry.name} />
-                  </div>
-                </td>
-              </motion.tr>
-            </EntryContextMenu>
-          );
-        })}
+        {entries.map((entry, i) => (
+          <ListRow key={entry.id} entry={entry} index={i} selected={selection.has(entry.id)} selection={selection} handlers={handlers} drag={drag} />
+        ))}
       </tbody>
     </table>
   );
-}
-
-export function FileBrowser({ view, ...props }: FileBrowserProps) {
-  return view === 'grid' ? <GridView {...props} /> : <ListView {...props} />;
 }
