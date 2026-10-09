@@ -226,6 +226,40 @@ describe('useUpload: single uploads', () => {
   });
 });
 
+describe('useUpload: bulk conflicts', () => {
+  const conflictAll = () => {
+    presignMock.mockImplementation(async (key, _type, _size, overwrite) => {
+      if (!overwrite) throw new ApiError('A file with this name already exists', 409);
+      return { upload_url: `https://storage.test/${key}`, headers: {}, key, method: 'PUT', expires_in: 900 };
+    });
+  };
+
+  it('replaces every conflicting file at once', async () => {
+    conflictAll();
+    const done = vi.fn();
+    const { result } = renderHook(() => useUpload());
+    await act(() => result.current.startUploads([file('a.txt'), file('b.txt'), file('c.txt')], ''));
+    expect(result.current.queue.map((q) => q.status)).toEqual(['conflict', 'conflict', 'conflict']);
+
+    await act(() => result.current.replaceConflicts(done));
+    expect(result.current.queue.map((q) => q.status)).toEqual(['completed', 'completed', 'completed']);
+    expect(presignMock.mock.calls.filter((c) => c[3] === true)).toHaveLength(3);
+    expect(done).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips every conflicting file but keeps the rest of the queue', async () => {
+    presignMock.mockImplementation(async (key) => {
+      if (key.startsWith('dup')) throw new ApiError('exists', 409);
+      return { upload_url: `https://storage.test/${key}`, headers: {}, key, method: 'PUT', expires_in: 900 };
+    });
+    const { result } = renderHook(() => useUpload());
+    await act(() => result.current.startUploads([file('dup1.txt'), file('ok.txt'), file('dup2.txt')], ''));
+
+    act(() => result.current.skipConflicts());
+    expect(result.current.queue.map((q) => q.file.name)).toEqual(['ok.txt']);
+  });
+});
+
 describe('useUpload: queue behaviour', () => {
   it('uploads at most three files at a time', async () => {
     let running = 0;

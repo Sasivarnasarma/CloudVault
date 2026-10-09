@@ -3,6 +3,7 @@ import {
   Cloud,
   FileText,
   FolderPlus,
+  FolderUp,
   HardDrive,
   Image as ImageIcon,
   LayoutGrid,
@@ -27,6 +28,7 @@ interface SidebarProps {
   theme: ThemeMode;
   onFilterChange: (filter: CategoryFilter) => void;
   onUpload: () => void;
+  onUploadFolder: () => void;
   onNewFolder: () => void;
   onToggleTheme: () => void;
   onNavigateHome: () => void;
@@ -97,6 +99,11 @@ export function Sidebar(props: SidebarProps) {
             Folder
           </Button>
         </div>
+
+        <Button variant="ghost" className="-mt-2 justify-start" onClick={props.onUploadFolder}>
+          <FolderUp className="size-4" />
+          Upload folder
+        </Button>
 
         <nav aria-label="File categories" className="flex-1">
           <p className="mb-2 px-2 text-xs font-medium uppercase tracking-wider text-ink-3">In this folder</p>

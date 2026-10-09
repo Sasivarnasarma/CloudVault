@@ -14,6 +14,7 @@ import { LoadMore } from '../features/files/LoadMore';
 import { TransferDialog, type TransferTarget } from '../features/files/TransferDialog';
 import { CreateFolderModal } from '../features/folders/CreateFolderModal';
 import { UploadTray } from '../features/upload/UploadTray';
+import { useFileDrop } from '../features/upload/useFileDrop';
 import { useObjects } from '../features/files/useObjects';
 import { useTheme } from '../hooks/useTheme';
 import { useUpload } from '../features/upload/useUpload';
@@ -21,8 +22,9 @@ import { errorMessage } from '../lib/cn';
 import { sortEntries, type Entry, type SortDir, type SortKey, type TransferMode } from '../lib/entries';
 import { categoryOf, matchesFilter, type CategoryFilter } from '../lib/fileKind';
 import { formatBytes } from '../lib/formatters';
+import { fromDirectoryInput, type DroppedContent } from '../lib/dropEntries';
 import { fetchHealthStatus } from '../services/healthService';
-import { deleteFolder } from '../services/folderService';
+import { createFolder, deleteFolder } from '../services/folderService';
 import { deleteObject, requestPresignedDownload } from '../services/objectService';
 import { triggerBrowserDownload } from '../services/transferService';
 import type { HealthResponse } from '../types';
@@ -36,10 +38,6 @@ function loadView(): ViewMode {
   } catch {
     return 'grid';
   }
-}
-
-function hasFiles(e: DragEvent): boolean {
-  return Array.from(e.dataTransfer?.types ?? []).includes('Files');
 }
 
 export function FilesPage() {
@@ -57,7 +55,18 @@ export function FilesPage() {
     navigateUp,
     refetch,
   } = useObjects();
-  const { queue, isUploading, startUploads, replaceItem, retryItem, cancelItem, dismissItem, clearQueue } = useUpload();
+  const {
+    queue,
+    isUploading,
+    startUploads,
+    replaceItem,
+    retryItem,
+    cancelItem,
+    replaceConflicts,
+    skipConflicts,
+    dismissItem,
+    clearQueue,
+  } = useUpload();
 
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthLoading, setHealthLoading] = useState(true);
@@ -74,11 +83,11 @@ export function FilesPage() {
   const [pendingDelete, setPendingDelete] = useState<Entry | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [transfer, setTransfer] = useState<TransferTarget | null>(null);
-  const [dragging, setDragging] = useState(false);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const dragDepth = useRef(0);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const scanToast = useRef<{ timer: number; id?: string | number }>({ timer: 0 });
 
   const loadHealth = useCallback(async () => {
     setHealthLoading(true);
@@ -150,16 +159,48 @@ export function FilesPage() {
     }
   }, []);
 
-  const handleUploadFiles = useCallback(
-    (files: File[]) => {
-      if (files.length === 0) return;
-      startUploads(files, currentPrefix, () => {
+  const handleUploadContent = useCallback(
+    async ({ sources, emptyFolders, skipped }: DroppedContent) => {
+      if (sources.length === 0 && emptyFolders.length === 0) {
+        if (skipped > 0) toast.info('Only system files were found, so nothing was uploaded.');
+        return;
+      }
+      const base = currentPrefix ? currentPrefix.replace(/\/+$/, '') + '/' : '';
+      const emptyDone = Promise.allSettled(emptyFolders.map((path) => createFolder(`${base}${path}`)));
+
+      if (sources.length > 0) {
+        await startUploads(sources, currentPrefix, async () => {
+          await emptyDone;
+          refetch();
+        });
+      } else {
+        await emptyDone;
         refetch();
-      });
+      }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [startUploads, currentPrefix, refetch],
   );
+
+  const handleUploadFiles = useCallback(
+    (files: File[]) => handleUploadContent({ sources: files.map((file) => ({ file })), emptyFolders: [], skipped: 0 }),
+    [handleUploadContent],
+  );
+
+  const { dragging } = useFileDrop({
+    onDrop: handleUploadContent,
+    // Reading a big folder tree can take a while: only mention it if it does.
+    onScanStart: () => {
+      scanToast.current.timer = window.setTimeout(() => {
+        scanToast.current.id = toast.loading('Reading folders…');
+      }, 400);
+    },
+    onScanEnd: () => {
+      window.clearTimeout(scanToast.current.timer);
+      if (scanToast.current.id !== undefined) toast.dismiss(scanToast.current.id);
+      scanToast.current.id = undefined;
+    },
+    onError: () => toast.error('Couldn’t read the dropped items.'),
+  });
 
   const confirmDelete = async () => {
     if (!pendingDelete) return;
@@ -200,53 +241,6 @@ export function FilesPage() {
     }));
   };
 
-  // Window-level drag & drop upload.
-  useEffect(() => {
-    const onEnter = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
-      dragDepth.current += 1;
-      setDragging(true);
-    };
-    const onLeave = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
-      dragDepth.current = Math.max(0, dragDepth.current - 1);
-      if (dragDepth.current === 0) setDragging(false);
-    };
-    const onOver = (e: DragEvent) => {
-      if (hasFiles(e)) e.preventDefault();
-    };
-    const onDrop = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
-      e.preventDefault();
-      dragDepth.current = 0;
-      setDragging(false);
-      const items = Array.from(e.dataTransfer?.items ?? []);
-      const files: File[] = [];
-      let skippedFolder = false;
-      for (const item of items) {
-        if (item.kind !== 'file') continue;
-        if (item.webkitGetAsEntry?.()?.isDirectory) {
-          skippedFolder = true;
-          continue;
-        }
-        const file = item.getAsFile();
-        if (file) files.push(file);
-      }
-      if (skippedFolder) toast.info('Folders can’t be uploaded yet. Only files were added.');
-      handleUploadFiles(files);
-    };
-    window.addEventListener('dragenter', onEnter);
-    window.addEventListener('dragleave', onLeave);
-    window.addEventListener('dragover', onOver);
-    window.addEventListener('drop', onDrop);
-    return () => {
-      window.removeEventListener('dragenter', onEnter);
-      window.removeEventListener('dragleave', onLeave);
-      window.removeEventListener('dragover', onOver);
-      window.removeEventListener('drop', onDrop);
-    };
-  }, [handleUploadFiles]);
-
   // Keyboard: "/" focuses search, Escape closes the inspector.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -282,6 +276,7 @@ export function FilesPage() {
         setNavOpen(false);
       }}
       onUpload={closeNavAnd(openUploadPicker)}
+      onUploadFolder={closeNavAnd(() => folderInputRef.current?.click())}
       onNewFolder={closeNavAnd(() => setFolderDialogOpen(true))}
       onToggleTheme={toggleTheme}
       onNavigateHome={closeNavAnd(() => navigateToFolder(''))}
@@ -441,6 +436,21 @@ export function FilesPage() {
         }}
       />
 
+      <input
+        ref={folderInputRef}
+        type="file"
+        multiple
+        {...({ webkitdirectory: '' } as object)}
+        className="hidden"
+        aria-hidden="true"
+        aria-label="Upload folder"
+        tabIndex={-1}
+        onChange={(e) => {
+          handleUploadContent(fromDirectoryInput(Array.from(e.target.files ?? [])));
+          e.target.value = '';
+        }}
+      />
+
       <CreateFolderModal
         isOpen={folderDialogOpen}
         onClose={() => setFolderDialogOpen(false)}
@@ -480,6 +490,8 @@ export function FilesPage() {
         onSkip={dismissItem}
         onCancel={cancelItem}
         onRetry={(item) => retryItem(item, refetch)}
+        onReplaceAll={() => replaceConflicts(refetch)}
+        onSkipAll={skipConflicts}
       />
 
       <AnimatePresence>

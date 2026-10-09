@@ -14,6 +14,17 @@ interface UploadTrayProps {
   onSkip: (id: string) => void;
   onCancel: (id: string) => void;
   onRetry: (item: UploadItem) => void;
+  onReplaceAll: () => void;
+  onSkipAll: () => void;
+}
+
+/** Long queues (e.g. a whole folder tree) would be slow to draw, so only the unfinished head is listed. */
+const VISIBLE_LIMIT = 100;
+
+function visibleItems(queue: UploadItem[]): { items: UploadItem[]; hidden: number } {
+  if (queue.length <= VISIBLE_LIMIT) return { items: queue, hidden: 0 };
+  const items = queue.filter((q) => q.status !== 'completed').slice(0, VISIBLE_LIMIT);
+  return { items, hidden: queue.length - items.length };
 }
 
 function StatusIcon({ status }: { status: UploadItem['status'] }) {
@@ -40,8 +51,20 @@ function heading(queue: UploadItem[], isUploading: boolean): string {
   return `${done} upload${done === 1 ? '' : 's'} complete`;
 }
 
-export function UploadTray({ queue, isUploading, onClear, onReplace, onSkip, onCancel, onRetry }: UploadTrayProps) {
+export function UploadTray({
+  queue,
+  isUploading,
+  onClear,
+  onReplace,
+  onSkip,
+  onCancel,
+  onRetry,
+  onReplaceAll,
+  onSkipAll,
+}: UploadTrayProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const { items, hidden } = visibleItems(queue);
+  const conflictCount = queue.filter((q) => q.status === 'conflict').length;
 
   return (
     <AnimatePresence>
@@ -72,7 +95,18 @@ export function UploadTray({ queue, isUploading, onClear, onReplace, onSkip, onC
 
           {!collapsed && (
             <ul className="max-h-64 divide-y divide-line overflow-y-auto border-t border-line">
-              {queue.map((item) => {
+              {conflictCount > 1 && (
+                <li className="flex items-center gap-2 bg-sunken/60 px-4 py-2">
+                  <span className="flex-1 text-xs text-ink-3">{conflictCount} files already exist</span>
+                  <Button variant="secondary" className="h-7 px-2.5 text-xs" disabled={isUploading} onClick={onReplaceAll}>
+                    Replace all
+                  </Button>
+                  <Button variant="ghost" className="h-7 px-2.5 text-xs" disabled={isUploading} onClick={onSkipAll}>
+                    Skip all
+                  </Button>
+                </li>
+              )}
+              {items.map((item) => {
                 const inFlight = item.status === 'uploading' || item.status === 'pending';
                 return (
                   <li key={item.id} className="px-4 py-2.5">
@@ -165,6 +199,11 @@ export function UploadTray({ queue, isUploading, onClear, onReplace, onSkip, onC
                   </li>
                 );
               })}
+              {hidden > 0 && (
+                <li className="px-4 py-2.5 text-center text-xs text-ink-3">
+                  …and {hidden} more ({queue.filter((q) => q.status === 'completed').length} finished)
+                </li>
+              )}
             </ul>
           )}
         </motion.section>

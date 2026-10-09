@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFile, makeFolder, makeListing } from '../test/fixtures';
+import { dirEntry, dropItems, fileEntry } from '../test/fsEntries';
 import type { ObjectListResponse } from '../types';
 import { FilesPage } from './FilesPage';
 
@@ -471,3 +472,80 @@ describe('FilesPage upload control', () => {
     await waitFor(() => expect(screen.getByText('2 uploads complete')).toBeInTheDocument());
   });
 });
+
+describe('FilesPage folder upload', () => {
+  const dropOnWindow = (items: DataTransferItemList) => {
+    const event = new Event('drop', { cancelable: true }) as DragEvent;
+    Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], items } });
+    window.dispatchEvent(event);
+  };
+
+  const withPath = (name: string, path: string) => {
+    const f = new File(['data'], name, { type: 'text/plain' });
+    Object.defineProperty(f, 'webkitRelativePath', { value: path });
+    return f;
+  };
+
+  it('uploads a picked folder with its structure, into the folder being viewed', async () => {
+    window.history.replaceState(null, '', '/?p=Reports');
+    const user = userEvent.setup();
+    render(<FilesPage />);
+    await screen.findByText('q1.pdf');
+
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Upload folder"]')!;
+    await user.upload(input, [withPath('a.txt', 'Trip/a.txt'), withPath('b.txt', 'Trip/day 2/b.txt'), withPath('.DS_Store', 'Trip/.DS_Store')]);
+
+    await waitFor(() => expect(requestPresignedUpload).toHaveBeenCalledTimes(2));
+    const keys = vi.mocked(requestPresignedUpload).mock.calls.map((c) => c[0]).sort();
+    expect(keys).toEqual(['Reports/Trip/a.txt', 'Reports/Trip/day 2/b.txt']);
+    expect(await screen.findByText('2 uploads complete')).toBeInTheDocument();
+  });
+
+  it('opens the folder picker from the sidebar', async () => {
+    const user = await renderPage();
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Upload folder"]')!;
+    const click = vi.spyOn(input, 'click');
+    await user.click(screen.getByRole('button', { name: 'Upload folder' }));
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it('uploads a folder dropped on the window and keeps empty folders', async () => {
+    await renderPage();
+    const tree = dirEntry('Album', [fileEntry('one.jpg'), dirEntry('Inner', [fileEntry('two.jpg')]), dirEntry('Blank', [])]);
+    const callsBefore = listMock.mock.calls.length;
+    dropOnWindow(dropItems(tree));
+
+    await waitFor(() => expect(requestPresignedUpload).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(requestPresignedUpload).mock.calls.map((c) => c[0]).sort()).toEqual(['Album/Inner/two.jpg', 'Album/one.jpg']);
+    await waitFor(() => expect(createFolder).toHaveBeenCalledWith('Album/Blank'));
+    await waitFor(() => expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore));
+  });
+
+  it('creates folders for a drop that contains only empty folders', async () => {
+    await renderPage();
+    dropOnWindow(dropItems(dirEntry('JustAShell', [])));
+    await waitFor(() => expect(createFolder).toHaveBeenCalledWith('JustAShell'));
+    expect(requestPresignedUpload).not.toHaveBeenCalled();
+  });
+
+  it('still uploads plain files dropped on the window', async () => {
+    await renderPage();
+    dropOnWindow(dropItems(new File(['hi'], 'loose.txt', { type: 'text/plain' })));
+    await waitFor(() => expect(requestPresignedUpload).toHaveBeenCalledWith('loose.txt', 'text/plain', 2, false));
+  });
+
+  it('replaces all conflicting files from a dropped folder in one go', async () => {
+    vi.mocked(requestPresignedUpload).mockImplementation(async (key, _t, _s, overwrite) => {
+      if (!overwrite) throw new ApiError('A file with this name already exists', 409);
+      return { upload_url: 'https://storage.test/put', headers: {}, key, method: 'PUT', expires_in: 900 };
+    });
+    const user = await renderPage();
+    dropOnWindow(dropItems(dirEntry('Dup', [fileEntry('a.txt'), fileEntry('b.txt')])));
+
+    expect(await screen.findByRole('button', { name: 'Replace all' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Replace all' }));
+    expect(await screen.findByText('2 uploads complete')).toBeInTheDocument();
+    expect(uploadFileDirect).toHaveBeenCalledTimes(2);
+  });
+});
+

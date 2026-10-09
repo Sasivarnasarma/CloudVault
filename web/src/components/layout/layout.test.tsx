@@ -19,6 +19,7 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
   const handlers = {
     onFilterChange: vi.fn(),
     onUpload: vi.fn(),
+    onUploadFolder: vi.fn(),
     onNewFolder: vi.fn(),
     onToggleTheme: vi.fn(),
     onNavigateHome: vi.fn(),
@@ -47,13 +48,15 @@ describe('Sidebar', () => {
   });
 
   it('wires up filters and the primary actions', async () => {
-    const { onFilterChange, onUpload, onNewFolder, onNavigateHome } = renderSidebar();
+    const { onFilterChange, onUpload, onUploadFolder, onNewFolder, onNavigateHome } = renderSidebar();
     await userEvent.click(screen.getByRole('button', { name: /Audio & video/ }));
     expect(onFilterChange).toHaveBeenCalledWith('media');
     await userEvent.click(screen.getByRole('button', { name: 'Upload' }));
     expect(onUpload).toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Folder' }));
     expect(onNewFolder).toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Upload folder' }));
+    expect(onUploadFolder).toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'CloudVault home' }));
     expect(onNavigateHome).toHaveBeenCalled();
   });

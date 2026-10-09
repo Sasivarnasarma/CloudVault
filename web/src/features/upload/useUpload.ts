@@ -252,6 +252,18 @@ export function useUpload() {
     patchItem(id, { status: 'cancelled', errorMsg: 'Upload cancelled' });
   };
 
+  /** Replace every file that is waiting on a name conflict. */
+  const replaceConflicts = async (onComplete?: () => void) => {
+    const conflicts = queueRef.current.filter((q) => q.status === 'conflict');
+    await Promise.all(conflicts.map((item) => run(item, true)));
+    onComplete?.();
+  };
+
+  /** Skip every file that is waiting on a name conflict. */
+  const skipConflicts = () => {
+    setQueue((prev) => prev.filter((q) => q.status !== 'conflict'));
+  };
+
   /** Drop a single entry (e.g. skip a conflicting file) from the queue. */
   const dismissItem = (id: string) => {
     const item = queueRef.current.find((q) => q.id === id);
@@ -271,6 +283,8 @@ export function useUpload() {
     replaceItem,
     retryItem,
     cancelItem,
+    replaceConflicts,
+    skipConflicts,
     dismissItem,
     clearQueue,
   };
