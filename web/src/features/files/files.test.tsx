@@ -30,13 +30,17 @@ function renderBrowser(overrides: Partial<React.ComponentProps<typeof FileBrowse
     onDownload: vi.fn(),
     onDelete: vi.fn(),
     onTransfer: vi.fn(),
+    onToggleSelect: vi.fn(),
+    onSelectRange: vi.fn(),
+    onSelectAll: vi.fn(),
+    onClearSelection: vi.fn(),
     onSortChange: vi.fn(),
   };
   render(
     <FileBrowser
       entries={entries}
       view="grid"
-      selectedId={null}
+      selection={new Set<string>()}
       sort={{ key: 'name', dir: 'asc' }}
       {...handlers}
       {...overrides}
@@ -71,7 +75,7 @@ describe('FileBrowser (grid)', () => {
   });
 
   it('reflects the selected file for assistive tech', () => {
-    renderBrowser({ selectedId: 'report.pdf' });
+    renderBrowser({ selection: new Set(['report.pdf']) });
     const pressed = screen.getByRole('button', { pressed: true });
     expect(pressed).toHaveTextContent('report.pdf');
   });

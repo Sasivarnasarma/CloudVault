@@ -7,6 +7,8 @@ import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { Sidebar } from '../components/layout/Sidebar';
 import { Toolbar } from '../components/layout/Toolbar';
 import { EmptyFolderState } from '../features/files/EmptyFolderState';
+import { BulkBar } from '../features/files/BulkBar';
+import { BulkTransferDialog, type BulkTransferTarget } from '../features/files/BulkTransferDialog';
 import { FileBrowser, type ViewMode } from '../features/files/FileBrowser';
 import { FileSkeleton } from '../features/files/FileSkeleton';
 import { Inspector } from '../features/files/Inspector';
@@ -15,7 +17,9 @@ import { TransferDialog, type TransferTarget } from '../features/files/TransferD
 import { CreateFolderModal } from '../features/folders/CreateFolderModal';
 import { UploadTray } from '../features/upload/UploadTray';
 import { useFileDrop } from '../features/upload/useFileDrop';
+import { deleteEntry, describeEntries, runBulk, summarize, type BulkResult } from '../features/files/bulkActions';
 import { useObjects } from '../features/files/useObjects';
+import { useSelection } from '../features/files/useSelection';
 import { useTheme } from '../hooks/useTheme';
 import { useUpload } from '../features/upload/useUpload';
 import { errorMessage } from '../lib/cn';
@@ -77,12 +81,14 @@ export function FilesPage() {
   const [view, setView] = useState<ViewMode>(loadView);
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'name', dir: 'asc' });
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [navOpen, setNavOpen] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Entry | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [transfer, setTransfer] = useState<TransferTarget | null>(null);
+  const [bulkDelete, setBulkDelete] = useState<Entry[] | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkTransfer, setBulkTransfer] = useState<BulkTransferTarget | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -115,7 +121,6 @@ export function FilesPage() {
 
   // Reset transient state when moving between folders.
   useEffect(() => {
-    setSelectedId(null);
     setSearch('');
   }, [currentPrefix]);
 
@@ -142,10 +147,17 @@ export function FilesPage() {
     return { all: files.length, documents: count('documents'), images: count('images'), media: count('media') };
   }, [data]);
 
-  const selectedFile = useMemo(() => {
-    const entry = allEntries.find((e) => e.id === selectedId);
-    return entry?.type === 'file' ? entry.file : null;
-  }, [allEntries, selectedId]);
+  const orderedIds = useMemo(() => entries.map((e) => e.id), [entries]);
+  const selection = useSelection(orderedIds, currentPrefix);
+
+  const selectedEntries = useMemo(
+    () => entries.filter((e) => selection.selected.has(e.id)),
+    [entries, selection.selected],
+  );
+  // One selected file shows its details; several items (or any folder) get the bulk bar instead.
+  const selectedFile = selectedEntries.length === 1 && selectedEntries[0].type === 'file' ? selectedEntries[0].file : null;
+  const bulkEntries =
+    selectedEntries.length > 1 || selectedEntries.some((e) => e.type === 'folder') ? selectedEntries : [];
 
   const filtered = search.trim() !== '' || filter !== 'all';
 
@@ -212,7 +224,7 @@ export function FilesPage() {
       } else {
         await deleteObject(pendingDelete.file.key);
         toast.success(`Deleted “${pendingDelete.name}”`);
-        if (selectedId === pendingDelete.id) setSelectedId(null);
+        selection.remove([pendingDelete.id]);
       }
       setPendingDelete(null);
       refetch();
@@ -228,10 +240,11 @@ export function FilesPage() {
       const verb = { rename: 'Renamed', move: 'Moved', copy: 'Copied' }[mode];
       const target = destination.replace(/\/+$/, '');
       toast.success(mode === 'rename' ? `${verb} to “${target.split('/').pop()}”` : `${verb} “${entry.name}” to ${target}`);
-      if (mode !== 'copy') setSelectedId(null);
+      if (mode !== 'copy') selection.remove([entry.id]);
       refetch();
     },
-    [refetch],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [refetch, selection.remove],
   );
 
   const changeSort = (key: SortKey, dir?: SortDir) => {
@@ -241,16 +254,55 @@ export function FilesPage() {
     }));
   };
 
-  // Keyboard: "/" focuses search, Escape closes the inspector.
+  const confirmBulkDelete = async () => {
+    if (!bulkDelete) return;
+    setBulkDeleting(true);
+    const results = await runBulk(bulkDelete, deleteEntry);
+    const { succeeded, failed } = summarize(results);
+    setBulkDeleting(false);
+    setBulkDelete(null);
+
+    if (failed.length === 0) {
+      toast.success(`Deleted ${describeEntries(succeeded.map((r) => r.entry))}`);
+    } else {
+      toast.error(`Couldn’t delete ${failed.length} of ${results.length} items`, { description: failed[0].error });
+    }
+    selection.replace(failed.map((r) => r.entry.id));
+    refetch();
+  };
+
+  const handleBulkTransferDone = (mode: 'move' | 'copy', results: BulkResult[]) => {
+    const { succeeded, failed } = summarize(results);
+    const verb = mode === 'move' ? 'Moved' : 'Copied';
+    if (succeeded.length > 0) toast.success(`${verb} ${describeEntries(succeeded.map((r) => r.entry))}`);
+    if (failed.length > 0 && succeeded.length === 0) toast.error(`Couldn’t ${mode} any of the ${results.length} items`);
+    selection.replace(failed.map((r) => r.entry.id));
+    refetch();
+  };
+
+  // Keyboard: "/" focuses search, Escape clears the selection, Ctrl/Cmd+A selects everything shown,
+  // Delete removes the selected items (after confirmation).
+  const keys = useRef({ clear: selection.clear, selectAll: selection.selectAll, selected: selectedEntries });
+  useEffect(() => {
+    keys.current = { clear: selection.clear, selectAll: selection.selectAll, selected: selectedEntries };
+  });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       const typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
-      if (e.key === '/' && !typing) {
+      if (typing || document.querySelector('[role="dialog"]')) return;
+
+      if (e.key === '/') {
         e.preventDefault();
         searchRef.current?.focus();
-      } else if (e.key === 'Escape' && !typing) {
-        setSelectedId(null);
+      } else if (e.key === 'Escape') {
+        keys.current.clear();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        keys.current.selectAll();
+      } else if (e.key === 'Delete' && keys.current.selected.length > 0) {
+        e.preventDefault();
+        setBulkDelete(keys.current.selected);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -334,7 +386,7 @@ export function FilesPage() {
           onOpenNav={() => setNavOpen(true)}
         />
 
-        <div className="flex min-h-0 flex-1">
+        <div className="relative flex min-h-0 flex-1">
           <main className="min-w-0 flex-1 overflow-y-auto" aria-busy={loading}>
             {error ? (
               <div className="flex h-full min-h-72 flex-col items-center justify-center px-6 text-center">
@@ -363,11 +415,15 @@ export function FilesPage() {
                 key={`${currentPrefix}|${view}`}
                 entries={entries}
                 view={view}
-                selectedId={selectedId}
+                selection={selection.selected}
                 sort={sort}
                 onSortChange={changeSort}
                 onOpenFolder={navigateToFolder}
-                onSelectFile={(id) => setSelectedId((cur) => (cur === id ? null : id))}
+                onSelectFile={selection.selectOnly}
+                onToggleSelect={selection.toggle}
+                onSelectRange={selection.selectRange}
+                onSelectAll={selection.selectAll}
+                onClearSelection={selection.clear}
                 onDownload={handleDownload}
                 onDelete={setPendingDelete}
                 onTransfer={(entry, mode) => setTransfer({ entry, mode })}
@@ -383,6 +439,15 @@ export function FilesPage() {
               />
             )}
           </main>
+
+          <BulkBar
+            entries={bulkEntries}
+            busy={bulkDeleting}
+            onMove={() => setBulkTransfer({ mode: 'move', entries: bulkEntries })}
+            onCopy={() => setBulkTransfer({ mode: 'copy', entries: bulkEntries })}
+            onDelete={() => setBulkDelete(bulkEntries)}
+            onClear={selection.clear}
+          />
 
           <AnimatePresence initial={false}>
             {selectedFile && (
@@ -400,7 +465,7 @@ export function FilesPage() {
                   <Inspector
                     file={selectedFile}
                     bucket={health?.bucket}
-                    onClose={() => setSelectedId(null)}
+                    onClose={selection.clear}
                     onDownload={handleDownload}
                     onDelete={(file) => setPendingDelete({ type: 'file', id: file.key, name: file.name, file })}
                   onTransfer={(file, mode) => setTransfer({ entry: { type: 'file', id: file.key, name: file.name, file }, mode })}
@@ -473,6 +538,25 @@ export function FilesPage() {
         confirmLabel="Delete"
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={!!bulkDelete}
+        loading={bulkDeleting}
+        title={`Delete ${bulkDelete?.length ?? 0} items?`}
+        description={`${describeEntries(bulkDelete ?? [])} will be permanently deleted${
+          bulkDelete?.some((e) => e.type === 'folder') ? ', including everything inside the folders' : ''
+        }. This can’t be undone.`}
+        confirmLabel="Delete"
+        onConfirm={confirmBulkDelete}
+        onCancel={() => setBulkDelete(null)}
+      />
+
+      <BulkTransferDialog
+        target={bulkTransfer}
+        startPrefix={currentPrefix}
+        onClose={() => setBulkTransfer(null)}
+        onDone={handleBulkTransferDone}
       />
 
       <TransferDialog

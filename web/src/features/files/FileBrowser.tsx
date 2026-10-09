@@ -1,5 +1,18 @@
-import { ArrowDown, ArrowUp, Copy, Download, FolderInput, FolderOpen, Info, Pencil, Trash2 } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Copy,
+  Download,
+  FolderInput,
+  FolderOpen,
+  Info,
+  Minus,
+  Pencil,
+  Trash2,
+} from 'lucide-react';
 import { motion } from 'motion/react';
+import type { MouseEvent } from 'react';
 import { EntryContextMenu, EntryMoreMenu, type MenuItem } from '../../components/common/EntryMenu';
 import { cn } from '../../lib/cn';
 import type { Entry, SortDir, SortKey, TransferMode } from '../../lib/entries';
@@ -11,7 +24,12 @@ export type ViewMode = 'grid' | 'list';
 
 export interface EntryHandlers {
   onOpenFolder: (prefix: string) => void;
+  /** Plain click on a file: select just that file (and show its details). */
   onSelectFile: (id: string) => void;
+  /** Checkbox or Ctrl/Cmd+click: add or remove one item from the selection. */
+  onToggleSelect: (id: string) => void;
+  /** Shift+click: select everything between the last clicked item and this one. */
+  onSelectRange: (id: string) => void;
   onDownload: (key: string, name: string) => void;
   onDelete: (entry: Entry) => void;
   onTransfer: (entry: Entry, mode: TransferMode) => void;
@@ -20,9 +38,11 @@ export interface EntryHandlers {
 interface FileBrowserProps extends EntryHandlers {
   entries: Entry[];
   view: ViewMode;
-  selectedId: string | null;
+  selection: ReadonlySet<string>;
   sort: { key: SortKey; dir: SortDir };
   onSortChange: (key: SortKey) => void;
+  onSelectAll: () => void;
+  onClearSelection: () => void;
 }
 
 function menuFor(entry: Entry, h: EntryHandlers): MenuItem[] {
@@ -46,17 +66,59 @@ function menuFor(entry: Entry, h: EntryHandlers): MenuItem[] {
   ];
 }
 
-function activate(entry: Entry, h: EntryHandlers) {
-  if (entry.type === 'folder') h.onOpenFolder(entry.folder.prefix);
+/** Click on an entry: modifiers extend the selection, otherwise open the folder / select the file. */
+function handleClick(e: MouseEvent, entry: Entry, h: EntryHandlers) {
+  if (e.shiftKey) h.onSelectRange(entry.id);
+  else if (e.ctrlKey || e.metaKey) h.onToggleSelect(entry.id);
+  else if (entry.type === 'folder') h.onOpenFolder(entry.folder.prefix);
   else h.onSelectFile(entry.id);
 }
 
-function GridView({ entries, selectedId, ...h }: Omit<FileBrowserProps, 'view' | 'sort' | 'onSortChange'>) {
+function SelectBox({
+  checked,
+  indeterminate = false,
+  label,
+  onChange,
+  className,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+  label: string;
+  onChange: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={indeterminate ? 'mixed' : checked}
+      aria-label={label}
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange();
+      }}
+      className={cn(
+        'inline-flex size-5 shrink-0 items-center justify-center rounded-md border transition',
+        checked || indeterminate
+          ? 'border-accent bg-accent text-accent-ink'
+          : 'border-line-strong bg-surface-2 text-transparent hover:border-accent',
+        className,
+      )}
+    >
+      {indeterminate ? <Minus className="size-3.5" strokeWidth={3} /> : <Check className="size-3.5" strokeWidth={3} />}
+    </button>
+  );
+}
+
+type ViewProps = Omit<FileBrowserProps, 'view'>;
+
+function GridView({ entries, selection, ...h }: ViewProps) {
+  const anySelected = selection.size > 0;
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-3 p-5">
       {entries.map((entry, i) => {
         const items = menuFor(entry, h);
-        const selected = entry.id === selectedId;
+        const selected = selection.has(entry.id);
         return (
           <EntryContextMenu key={entry.id} items={items}>
             <motion.div
@@ -64,7 +126,7 @@ function GridView({ entries, selectedId, ...h }: Omit<FileBrowserProps, 'view' |
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.22, delay: Math.min(i * 0.015, 0.2) }}
               className={cn(
-                'group relative rounded-2xl border bg-surface transition [contain-intrinsic-size:auto_9rem] [content-visibility:auto]',
+                'group relative select-none rounded-2xl border bg-surface transition [contain-intrinsic-size:auto_9rem] [content-visibility:auto]',
                 selected
                   ? 'border-accent bg-accent-soft shadow-card'
                   : 'border-line hover:-translate-y-0.5 hover:border-line-strong hover:shadow-card',
@@ -72,7 +134,7 @@ function GridView({ entries, selectedId, ...h }: Omit<FileBrowserProps, 'view' |
             >
               <button
                 type="button"
-                onClick={() => activate(entry, h)}
+                onClick={(e) => handleClick(e, entry, h)}
                 onDoubleClick={() => entry.type === 'file' && h.onDownload(entry.file.key, entry.name)}
                 aria-pressed={entry.type === 'file' ? selected : undefined}
                 className="flex w-full flex-col items-start rounded-2xl p-4 text-left"
@@ -87,6 +149,14 @@ function GridView({ entries, selectedId, ...h }: Omit<FileBrowserProps, 'view' |
                   {entry.type === 'folder' ? 'Folder' : `${formatBytes(entry.file.size, 1)} · ${kindLabel(entry.file)}`}
                 </span>
               </button>
+              <div
+                className={cn(
+                  'absolute left-2.5 top-2.5 transition focus-within:opacity-100 group-hover:opacity-100',
+                  selected || anySelected ? 'opacity-100' : 'opacity-0',
+                )}
+              >
+                <SelectBox checked={selected} label={`Select ${entry.name}`} onChange={() => h.onToggleSelect(entry.id)} />
+              </div>
               <div className="absolute right-2 top-2 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
                 <EntryMoreMenu items={items} label={entry.name} />
               </div>
@@ -131,12 +201,23 @@ function SortHeader({
   );
 }
 
-function ListView({ entries, selectedId, sort, onSortChange, ...h }: Omit<FileBrowserProps, 'view'>) {
+function ListView({ entries, selection, sort, onSortChange, onSelectAll, onClearSelection, ...h }: ViewProps) {
+  const selectedCount = entries.filter((e) => selection.has(e.id)).length;
+  const allSelected = entries.length > 0 && selectedCount === entries.length;
+
   return (
     <table className="w-full table-fixed border-collapse text-sm">
       <thead className="sticky top-0 z-10 bg-canvas/90 text-left text-xs uppercase tracking-wider text-ink-3 backdrop-blur">
         <tr className="border-b border-line">
-          <SortHeader label="Name" sortKey="name" sort={sort} onSortChange={onSortChange} className="pl-6" />
+          <th scope="col" className="w-12 pl-5">
+            <SelectBox
+              checked={allSelected}
+              indeterminate={selectedCount > 0 && !allSelected}
+              label="Select all"
+              onChange={() => (allSelected || selectedCount > 0 ? onClearSelection() : onSelectAll())}
+            />
+          </th>
+          <SortHeader label="Name" sortKey="name" sort={sort} onSortChange={onSortChange} className="pl-2" />
           <SortHeader label="Modified" sortKey="modified" sort={sort} onSortChange={onSortChange} className="hidden w-44 md:table-cell" />
           <SortHeader label="Size" sortKey="size" sort={sort} onSortChange={onSortChange} className="hidden w-28 sm:table-cell" />
           <th scope="col" className="w-14 px-2">
@@ -147,7 +228,7 @@ function ListView({ entries, selectedId, sort, onSortChange, ...h }: Omit<FileBr
       <tbody>
         {entries.map((entry, i) => {
           const items = menuFor(entry, h);
-          const selected = entry.id === selectedId;
+          const selected = selection.has(entry.id);
           return (
             <EntryContextMenu key={entry.id} items={items}>
               <motion.tr
@@ -155,15 +236,24 @@ function ListView({ entries, selectedId, sort, onSortChange, ...h }: Omit<FileBr
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.2, delay: Math.min(i * 0.012, 0.15) }}
                 className={cn(
-                  'group border-b border-line/60 transition',
+                  'group select-none border-b border-line/60 transition',
                   selected ? 'bg-accent-soft' : 'hover:bg-surface',
                 )}
               >
-                <td className="py-1.5 pl-6 pr-4">
+                <td className="pl-5">
+                  <SelectBox
+                    checked={selected}
+                    label={`Select ${entry.name}`}
+                    onChange={() => h.onToggleSelect(entry.id)}
+                    className={cn(!selected && selection.size === 0 && 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100')}
+                  />
+                </td>
+                <td className="py-1.5 pl-2 pr-4">
                   <button
                     type="button"
-                    onClick={() => activate(entry, h)}
+                    onClick={(e) => handleClick(e, entry, h)}
                     onDoubleClick={() => entry.type === 'file' && h.onDownload(entry.file.key, entry.name)}
+                    aria-pressed={entry.type === 'file' ? selected : undefined}
                     className="flex w-full min-w-0 items-center gap-3 rounded-lg py-1 text-left"
                   >
                     {entry.type === 'folder' ? <FolderIcon size="sm" /> : <FileIcon file={entry.file} size="sm" />}

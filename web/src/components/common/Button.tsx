@@ -19,7 +19,7 @@ export function Button({ variant = 'secondary', className, type = 'button', ...p
     <button
       type={type}
       className={cn(
-        'inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-medium transition',
+        'inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3.5 text-sm font-medium transition',
         'active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
         VARIANTS[variant],
         className,

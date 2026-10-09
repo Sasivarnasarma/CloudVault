@@ -11,10 +11,12 @@ interface FolderPickerProps {
   onNavigate: (prefix: string) => void;
   /** A folder that cannot be chosen or entered (the folder being moved). */
   excludedPrefix?: string;
+  /** Several such folders, when more than one is being moved at once. */
+  excludedPrefixes?: readonly string[];
 }
 
 /** Lets the user browse the bucket's folders and pick a destination. */
-export function FolderPicker({ prefix, onNavigate, excludedPrefix }: FolderPickerProps) {
+export function FolderPicker({ prefix, onNavigate, excludedPrefix, excludedPrefixes }: FolderPickerProps) {
   const [state, setState] = useState<{ prefix: string; folders: FolderObject[] } | { prefix: string; error: string } | null>(
     null,
   );
@@ -30,7 +32,7 @@ export function FolderPicker({ prefix, onNavigate, excludedPrefix }: FolderPicke
   }, [prefix]);
 
   const current = state && state.prefix === prefix ? state : null;
-  const folders = current && 'folders' in current ? current.folders.filter((f) => f.prefix !== excludedPrefix) : [];
+  const folders = current && 'folders' in current ? current.folders.filter((f) => f.prefix !== excludedPrefix && !excludedPrefixes?.includes(f.prefix)) : [];
 
   return (
     <div className="rounded-xl border border-line bg-surface">
