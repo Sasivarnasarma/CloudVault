@@ -10,13 +10,14 @@ import { EmptyFolderState } from '../features/files/EmptyFolderState';
 import { FileBrowser, type ViewMode } from '../features/files/FileBrowser';
 import { FileSkeleton } from '../features/files/FileSkeleton';
 import { Inspector } from '../features/files/Inspector';
+import { TransferDialog, type TransferTarget } from '../features/files/TransferDialog';
 import { CreateFolderModal } from '../features/folders/CreateFolderModal';
 import { UploadTray } from '../features/upload/UploadTray';
 import { useObjects } from '../features/files/useObjects';
 import { useTheme } from '../hooks/useTheme';
 import { useUpload } from '../features/upload/useUpload';
 import { errorMessage } from '../lib/cn';
-import { sortEntries, type Entry, type SortDir, type SortKey } from '../lib/entries';
+import { sortEntries, type Entry, type SortDir, type SortKey, type TransferMode } from '../lib/entries';
 import { categoryOf, matchesFilter, type CategoryFilter } from '../lib/fileKind';
 import { formatBytes } from '../lib/formatters';
 import { fetchHealthStatus } from '../services/healthService';
@@ -43,7 +44,7 @@ function hasFiles(e: DragEvent): boolean {
 export function FilesPage() {
   const { theme, toggleTheme } = useTheme();
   const { currentPrefix, data, loading, error, navigateToFolder, navigateUp, refetch } = useObjects();
-  const { queue, isUploading, startUploads, clearQueue } = useUpload();
+  const { queue, isUploading, startUploads, replaceItem, dismissItem, clearQueue } = useUpload();
 
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthLoading, setHealthLoading] = useState(true);
@@ -59,6 +60,7 @@ export function FilesPage() {
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Entry | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [transfer, setTransfer] = useState<TransferTarget | null>(null);
   const [dragging, setDragging] = useState(false);
 
   const searchRef = useRef<HTMLInputElement>(null);
@@ -169,6 +171,17 @@ export function FilesPage() {
       setDeleting(false);
     }
   };
+
+  const handleTransferDone = useCallback(
+    ({ mode, entry, destination }: { mode: TransferMode; entry: Entry; destination: string }) => {
+      const verb = { rename: 'Renamed', move: 'Moved', copy: 'Copied' }[mode];
+      const target = destination.replace(/\/+$/, '');
+      toast.success(mode === 'rename' ? `${verb} to “${target.split('/').pop()}”` : `${verb} “${entry.name}” to ${target}`);
+      if (mode !== 'copy') setSelectedId(null);
+      refetch();
+    },
+    [refetch],
+  );
 
   const changeSort = (key: SortKey, dir?: SortDir) => {
     setSort((prev) => ({
@@ -352,6 +365,7 @@ export function FilesPage() {
                 onSelectFile={(id) => setSelectedId((cur) => (cur === id ? null : id))}
                 onDownload={handleDownload}
                 onDelete={setPendingDelete}
+                onTransfer={(entry, mode) => setTransfer({ entry, mode })}
               />
             )}
           </main>
@@ -375,6 +389,7 @@ export function FilesPage() {
                     onClose={() => setSelectedId(null)}
                     onDownload={handleDownload}
                     onDelete={(file) => setPendingDelete({ type: 'file', id: file.key, name: file.name, file })}
+                  onTransfer={(file, mode) => setTransfer({ entry: { type: 'file', id: file.key, name: file.name, file }, mode })}
                   />
                 </div>
               </motion.aside>
@@ -429,7 +444,20 @@ export function FilesPage() {
         onCancel={() => setPendingDelete(null)}
       />
 
-      <UploadTray queue={queue} isUploading={isUploading} onClear={clearQueue} />
+      <TransferDialog
+        target={transfer}
+        startPrefix={currentPrefix}
+        onClose={() => setTransfer(null)}
+        onDone={handleTransferDone}
+      />
+
+      <UploadTray
+        queue={queue}
+        isUploading={isUploading}
+        onClear={clearQueue}
+        onReplace={(item) => replaceItem(item, refetch)}
+        onSkip={dismissItem}
+      />
 
       <AnimatePresence>
         {dragging && (

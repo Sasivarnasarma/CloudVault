@@ -33,8 +33,8 @@ describe('useUpload', () => {
 
     await act(() => result.current.startUploads([file('a.txt'), file('b.bin', '')], 'docs', done));
 
-    expect(presignMock).toHaveBeenNthCalledWith(1, 'docs/a.txt', 'text/plain', 4);
-    expect(presignMock).toHaveBeenNthCalledWith(2, 'docs/b.bin', 'application/octet-stream', 4);
+    expect(presignMock).toHaveBeenNthCalledWith(1, 'docs/a.txt', 'text/plain', 4, false);
+    expect(presignMock).toHaveBeenNthCalledWith(2, 'docs/b.bin', 'application/octet-stream', 4, false);
     expect(uploadMock).toHaveBeenCalledTimes(2);
     expect(uploadMock.mock.calls[0][0]).toBe('https://storage.test/docs/a.txt');
     expect(result.current.queue.map((q) => [q.status, q.progress])).toEqual([
@@ -51,7 +51,7 @@ describe('useUpload', () => {
     expect(presignMock.mock.calls[0][0]).toBe('a.txt');
   });
 
-  it('keeps going after a failure and surfaces the reason', async () => {
+  it('keeps going after a conflict and surfaces the reason', async () => {
     presignMock.mockRejectedValueOnce(new ApiError('A file with this name already exists', 409));
     const done = vi.fn();
     const { result } = renderHook(() => useUpload());
@@ -59,11 +59,47 @@ describe('useUpload', () => {
     await act(() => result.current.startUploads([file('dup.txt'), file('ok.txt')], 'docs/', done));
 
     const [first, second] = result.current.queue;
-    expect(first.status).toBe('error');
+    expect(first.status).toBe('conflict');
     expect(first.errorMsg).toBe('A file with this name already exists');
     expect(second.status).toBe('completed');
     expect(uploadMock).toHaveBeenCalledTimes(1);
     expect(done).toHaveBeenCalledTimes(1);
+  });
+
+  it('flags name conflicts separately from other failures', async () => {
+    presignMock.mockRejectedValueOnce(new ApiError('A file with this name already exists', 409));
+    const { result } = renderHook(() => useUpload());
+    await act(() => result.current.startUploads([file('dup.txt')], 'docs/'));
+
+    expect(result.current.queue[0]).toMatchObject({
+      status: 'conflict',
+      key: 'docs/dup.txt',
+      errorMsg: 'A file with this name already exists',
+    });
+  });
+
+  it('replaces a conflicting file by re-uploading with overwrite', async () => {
+    presignMock.mockRejectedValueOnce(new ApiError('A file with this name already exists', 409));
+    const done = vi.fn();
+    const { result } = renderHook(() => useUpload());
+    await act(() => result.current.startUploads([file('dup.txt')], 'docs/'));
+
+    await act(() => result.current.replaceItem(result.current.queue[0], done));
+
+    expect(presignMock).toHaveBeenLastCalledWith('docs/dup.txt', 'text/plain', 4, true);
+    expect(uploadMock).toHaveBeenCalledTimes(1);
+    expect(result.current.queue[0]).toMatchObject({ status: 'completed', progress: 100, errorMsg: undefined });
+    expect(result.current.isUploading).toBe(false);
+    expect(done).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips a conflicting file by dropping it from the queue', async () => {
+    presignMock.mockRejectedValueOnce(new ApiError('exists', 409));
+    const { result } = renderHook(() => useUpload());
+    await act(() => result.current.startUploads([file('dup.txt'), file('ok.txt')], ''));
+
+    act(() => result.current.dismissItem(result.current.queue[0].id));
+    expect(result.current.queue.map((q) => q.file.name)).toEqual(['ok.txt']);
   });
 
   it('marks the upload as failed when the direct transfer fails', async () => {

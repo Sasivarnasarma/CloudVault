@@ -59,3 +59,13 @@ export interface DeleteFolderResponse {
   prefix: string;
   deleted_count: number;
 }
+
+export interface TransferObjectResponse {
+  success: boolean;
+  source: string;
+  destination: string;
+}
+
+export interface TransferFolderResponse extends TransferObjectResponse {
+  item_count: number;
+}

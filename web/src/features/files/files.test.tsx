@@ -29,6 +29,7 @@ function renderBrowser(overrides: Partial<React.ComponentProps<typeof FileBrowse
     onSelectFile: vi.fn(),
     onDownload: vi.fn(),
     onDelete: vi.fn(),
+    onTransfer: vi.fn(),
     onSortChange: vi.fn(),
   };
   render(
@@ -87,6 +88,24 @@ describe('FileBrowser (grid)', () => {
   });
 });
 
+describe('FileBrowser organize actions', () => {
+  it('offers rename, move and copy for files', async () => {
+    const { onTransfer } = renderBrowser();
+    for (const [label, mode] of [['Rename', 'rename'], ['Move to…', 'move'], ['Copy to…', 'copy']] as const) {
+      await userEvent.click(screen.getByRole('button', { name: 'More actions for report.pdf' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: label }));
+      expect(onTransfer).toHaveBeenLastCalledWith(entries[1], mode);
+    }
+  });
+
+  it('offers rename, move and copy for folders too', async () => {
+    const { onTransfer } = renderBrowser();
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for Reports' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Move to…' }));
+    expect(onTransfer).toHaveBeenCalledWith(entries[0], 'move');
+  });
+});
+
 describe('FileBrowser (list)', () => {
   it('renders sortable columns and marks the active sort', () => {
     renderBrowser({ view: 'list', sort: { key: 'size', dir: 'desc' } });
@@ -140,7 +159,7 @@ describe('Inspector', () => {
   });
 
   const renderInspector = (file = report) => {
-    const handlers = { onClose: vi.fn(), onDownload: vi.fn(), onDelete: vi.fn() };
+    const handlers = { onClose: vi.fn(), onDownload: vi.fn(), onDelete: vi.fn(), onTransfer: vi.fn() };
     render(<Inspector file={file} bucket="my-bucket" {...handlers} />);
     return handlers;
   };
@@ -169,6 +188,16 @@ describe('Inspector', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('starts rename, move and copy from the details panel', async () => {
+    const { onTransfer } = renderInspector();
+    await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    expect(onTransfer).toHaveBeenLastCalledWith(report, 'rename');
+    await userEvent.click(screen.getByRole('button', { name: 'Move' }));
+    expect(onTransfer).toHaveBeenLastCalledWith(report, 'move');
+    await userEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    expect(onTransfer).toHaveBeenLastCalledWith(report, 'copy');
+  });
+
   it('copies the object key', async () => {
     const user = userEvent.setup();
     renderInspector(makeFile('dir/a.txt'));
@@ -179,7 +208,7 @@ describe('Inspector', () => {
 
   it('previews images through a presigned URL but not other files', async () => {
     const image = makeFile('photo.png', { content_type: 'image/png' });
-    const { unmount } = render(<Inspector file={image} onClose={() => {}} onDownload={() => {}} onDelete={() => {}} />);
+    const { unmount } = render(<Inspector file={image} onClose={() => {}} onDownload={() => {}} onDelete={() => {}} onTransfer={() => {}} />);
     const preview = await screen.findByRole('img', { name: 'photo.png' });
     expect(preview).toHaveAttribute('src', 'https://storage.test/img.png');
     expect(downloadMock).toHaveBeenCalledWith('photo.png');

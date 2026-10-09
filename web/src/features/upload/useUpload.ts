@@ -1,13 +1,17 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { errorMessage } from '../../lib/cn';
+import { ApiError } from '../../services/http';
 import { requestPresignedUpload } from '../../services/objectService';
 import { uploadFileDirect } from '../../services/transferService';
-import { errorMessage } from '../../lib/cn';
 
 export interface UploadItem {
   id: string;
   file: File;
+  /** Destination object key. */
+  key: string;
   progress: number;
-  status: 'pending' | 'uploading' | 'completed' | 'error';
+  /** `conflict` means the key already exists and the user can choose to replace it. */
+  status: 'pending' | 'uploading' | 'completed' | 'error' | 'conflict';
   errorMsg?: string;
 }
 
@@ -15,71 +19,64 @@ export function useUpload() {
   const [queue, setQueue] = useState<UploadItem[]>([]);
   const [isUploading, setIsUploading] = useState<boolean>(false);
 
-  const startUploads = async (
-    files: File[],
-    targetPrefix: string,
-    onAllComplete?: () => void
-  ) => {
+  const patchItem = useCallback((id: string, patch: Partial<UploadItem>) => {
+    setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, ...patch } : q)));
+  }, []);
+
+  const uploadItem = useCallback(
+    async (item: UploadItem, overwrite: boolean) => {
+      patchItem(item.id, { status: 'uploading', progress: 0, errorMsg: undefined });
+      const contentType = item.file.type || 'application/octet-stream';
+
+      try {
+        const presign = await requestPresignedUpload(item.key, contentType, item.file.size, overwrite);
+        await uploadFileDirect(presign.upload_url, item.file, contentType, (percent) =>
+          patchItem(item.id, { progress: percent }),
+        );
+        patchItem(item.id, { progress: 100, status: 'completed' });
+      } catch (err) {
+        const exists = err instanceof ApiError && err.status === 409;
+        patchItem(item.id, {
+          status: exists ? 'conflict' : 'error',
+          errorMsg: errorMessage(err, 'Upload failed'),
+        });
+      }
+    },
+    [patchItem],
+  );
+
+  const startUploads = async (files: File[], targetPrefix: string, onAllComplete?: () => void) => {
     if (files.length === 0) return;
 
-    const initialQueue: UploadItem[] = files.map((file, idx) => ({
+    const cleanPrefix = targetPrefix ? targetPrefix.replace(/\/+$/, '') + '/' : '';
+    const items: UploadItem[] = files.map((file, idx) => ({
       id: `${Date.now()}-${idx}-${file.name}`,
       file,
+      key: `${cleanPrefix}${file.name}`,
       progress: 0,
       status: 'pending',
     }));
 
-    setQueue(initialQueue);
+    setQueue(items);
     setIsUploading(true);
-
-    const cleanPrefix = targetPrefix ? targetPrefix.replace(/\/+$/, '') + '/' : '';
-
-    for (const item of initialQueue) {
-      setQueue((prev) =>
-        prev.map((q) => (q.id === item.id ? { ...q, status: 'uploading' } : q))
-      );
-
-      const objectKey = `${cleanPrefix}${item.file.name}`;
-      const contentType = item.file.type || 'application/octet-stream';
-
-      try {
-        const presignRes = await requestPresignedUpload(
-          objectKey,
-          contentType,
-          item.file.size
-        );
-
-        await uploadFileDirect(
-          presignRes.upload_url,
-          item.file,
-          contentType,
-          (percent) => {
-            setQueue((prev) =>
-              prev.map((q) => (q.id === item.id ? { ...q, progress: percent } : q))
-            );
-          }
-        );
-
-        setQueue((prev) =>
-          prev.map((q) =>
-            q.id === item.id ? { ...q, progress: 100, status: 'completed' } : q
-          )
-        );
-      } catch (err) {
-        setQueue((prev) =>
-          prev.map((q) =>
-            q.id === item.id
-              ? { ...q, status: 'error', errorMsg: errorMessage(err, 'Upload failed') }
-              : q
-          )
-        );
-      }
+    for (const item of items) {
+      await uploadItem(item, false);
     }
-
     setIsUploading(false);
-    if (onAllComplete) {
-      onAllComplete();
-    }
+    onAllComplete?.();
+  };
+
+  /** Re-upload a file that hit a name conflict, replacing the existing object. */
+  const replaceItem = async (item: UploadItem, onComplete?: () => void) => {
+    setIsUploading(true);
+    await uploadItem(item, true);
+    setIsUploading(false);
+    onComplete?.();
+  };
+
+  /** Drop a single entry (e.g. skip a conflicting file) from the queue. */
+  const dismissItem = (id: string) => {
+    setQueue((prev) => prev.filter((q) => q.id !== id));
   };
 
   const clearQueue = () => {
@@ -90,6 +87,8 @@ export function useUpload() {
     queue,
     isUploading,
     startUploads,
+    replaceItem,
+    dismissItem,
     clearQueue,
   };
 }

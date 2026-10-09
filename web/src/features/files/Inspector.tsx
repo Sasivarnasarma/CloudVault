@@ -1,6 +1,7 @@
-import { Check, Copy, Download, Trash2, X } from 'lucide-react';
+import { Check, Copy, Download, FolderInput, Pencil, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button, IconButton } from '../../components/common/Button';
+import type { TransferMode } from '../../lib/entries';
 import { categoryOf } from '../../lib/fileKind';
 import { formatBytes, formatDate } from '../../lib/formatters';
 import { getObjectMetadata, requestPresignedDownload } from '../../services/objectService';
@@ -13,6 +14,7 @@ interface InspectorProps {
   onClose: () => void;
   onDownload: (key: string, name: string) => void;
   onDelete: (file: FileObject) => void;
+  onTransfer: (file: FileObject, mode: TransferMode) => void;
 }
 
 function ImagePreview({ file }: { file: FileObject }) {
@@ -52,7 +54,7 @@ function Field({ label, children, mono }: { label: string; children: React.React
   );
 }
 
-export function Inspector({ file, bucket, onClose, onDownload, onDelete }: InspectorProps) {
+export function Inspector({ file, bucket, onClose, onDownload, onDelete, onTransfer }: InspectorProps) {
   const [copied, setCopied] = useState(false);
   // The listing guesses content types from file names; the real value comes from storage.
   const [actualType, setActualType] = useState<{ key: string; type: string } | null>(null);
@@ -110,6 +112,21 @@ export function Inspector({ file, bucket, onClose, onDownload, onDelete }: Inspe
           <IconButton label="Delete file" className="border border-line-strong text-danger hover:bg-danger-soft hover:text-danger" onClick={() => onDelete(file)}>
             <Trash2 className="size-4" />
           </IconButton>
+        </div>
+
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          <Button variant="secondary" className="px-2" onClick={() => onTransfer(file, 'rename')}>
+            <Pencil className="size-4" />
+            Rename
+          </Button>
+          <Button variant="secondary" className="px-2" onClick={() => onTransfer(file, 'move')}>
+            <FolderInput className="size-4" />
+            Move
+          </Button>
+          <Button variant="secondary" className="px-2" onClick={() => onTransfer(file, 'copy')}>
+            <Copy className="size-4" />
+            Copy
+          </Button>
         </div>
 
         <dl className="mt-6 space-y-4 border-t border-line pt-5">

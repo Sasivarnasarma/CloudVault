@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createFolder, deleteFolder } from './folderService';
+import { copyFolder, createFolder, deleteFolder, moveFolder } from './folderService';
 import { fetchHealthStatus } from './healthService';
 import { ApiError, jsonBody, request } from './http';
 import {
+  copyObject,
   deleteObject,
   getObjectMetadata,
   listObjects,
+  moveObject,
   requestPresignedDownload,
   requestPresignedUpload,
 } from './objectService';
@@ -85,7 +87,10 @@ describe('objectService', () => {
     const { url, init } = lastCall();
     expect(url).toBe('/api/objects/presign-upload');
     expect(init?.method).toBe('POST');
-    expect(JSON.parse(String(init?.body))).toEqual({ key: 'dir/a.txt', content_type: 'text/plain', size: 12 });
+    expect(JSON.parse(String(init?.body))).toEqual({ key: 'dir/a.txt', content_type: 'text/plain', size: 12, overwrite: false });
+
+    await requestPresignedUpload('dir/a.txt', 'text/plain', 12, true);
+    expect(JSON.parse(String(lastCall().init?.body)).overwrite).toBe(true);
   });
 
   it('requests download URLs with an optional filename', async () => {
@@ -93,6 +98,39 @@ describe('objectService', () => {
     expect(lastCall().url).toBe('/api/objects/presign-download?key=dir%2Fa.txt');
     await requestPresignedDownload('dir/a.txt', 'My File.txt');
     expect(lastCall().url).toBe('/api/objects/presign-download?key=dir%2Fa.txt&filename=My+File.txt');
+  });
+});
+
+describe('copy and move services', () => {
+  beforeEach(() => fetchMock.mockImplementation(async () => jsonResponse({})));
+
+  it.each([
+    ['copy', copyObject],
+    ['move', moveObject],
+  ] as const)('posts %s requests for files, with overwrite off by default', async (action, fn) => {
+    await fn('a/old.txt', 'b/new.txt');
+    expect(lastCall().url).toBe(`/api/objects/${action}`);
+    expect(lastCall().init?.method).toBe('POST');
+    expect(JSON.parse(String(lastCall().init?.body))).toEqual({ source: 'a/old.txt', destination: 'b/new.txt', overwrite: false });
+
+    await fn('a/old.txt', 'b/new.txt', true);
+    expect(JSON.parse(String(lastCall().init?.body)).overwrite).toBe(true);
+  });
+
+  it.each([
+    ['copy', copyFolder],
+    ['move', moveFolder],
+  ] as const)('posts %s requests for folders without an overwrite option', async (action, fn) => {
+    await fn('docs/', 'archive/docs');
+    expect(lastCall().url).toBe(`/api/folders/${action}`);
+    expect(JSON.parse(String(lastCall().init?.body))).toEqual({ source: 'docs/', destination: 'archive/docs' });
+  });
+
+  it('surfaces the conflict message and status from the API', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ detail: 'A file with this name already exists' }, 409));
+    const error = await moveObject('a.txt', 'b.txt').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(409);
   });
 });
 

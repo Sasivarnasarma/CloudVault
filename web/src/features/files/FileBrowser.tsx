@@ -1,8 +1,8 @@
-import { ArrowDown, ArrowUp, Download, FolderOpen, Info, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Copy, Download, FolderInput, FolderOpen, Info, Pencil, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { EntryContextMenu, EntryMoreMenu, type MenuItem } from '../../components/common/EntryMenu';
 import { cn } from '../../lib/cn';
-import type { Entry, SortDir, SortKey } from '../../lib/entries';
+import type { Entry, SortDir, SortKey, TransferMode } from '../../lib/entries';
 import { kindLabel } from '../../lib/fileKind';
 import { formatBytes, formatDate, formatRelativeDate } from '../../lib/formatters';
 import { FileIcon, FolderIcon } from './FileIcon';
@@ -14,6 +14,7 @@ export interface EntryHandlers {
   onSelectFile: (id: string) => void;
   onDownload: (key: string, name: string) => void;
   onDelete: (entry: Entry) => void;
+  onTransfer: (entry: Entry, mode: TransferMode) => void;
 }
 
 interface FileBrowserProps extends EntryHandlers {
@@ -25,15 +26,22 @@ interface FileBrowserProps extends EntryHandlers {
 }
 
 function menuFor(entry: Entry, h: EntryHandlers): MenuItem[] {
+  const organize: MenuItem[] = [
+    { label: 'Rename', icon: Pencil, separatorBefore: true, onSelect: () => h.onTransfer(entry, 'rename') },
+    { label: 'Move to…', icon: FolderInput, onSelect: () => h.onTransfer(entry, 'move') },
+    { label: 'Copy to…', icon: Copy, onSelect: () => h.onTransfer(entry, 'copy') },
+  ];
   if (entry.type === 'folder') {
     return [
       { label: 'Open', icon: FolderOpen, onSelect: () => h.onOpenFolder(entry.folder.prefix) },
+      ...organize,
       { label: 'Delete folder', icon: Trash2, danger: true, separatorBefore: true, onSelect: () => h.onDelete(entry) },
     ];
   }
   return [
     { label: 'Details', icon: Info, onSelect: () => h.onSelectFile(entry.id) },
     { label: 'Download', icon: Download, onSelect: () => h.onDownload(entry.file.key, entry.name) },
+    ...organize,
     { label: 'Delete', icon: Trash2, danger: true, separatorBefore: true, onSelect: () => h.onDelete(entry) },
   ];
 }

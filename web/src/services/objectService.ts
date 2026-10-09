@@ -4,6 +4,7 @@ import type {
   ObjectListResponse,
   PresignDownloadResponse,
   PresignUploadResponse,
+  TransferObjectResponse,
 } from '../types';
 import { jsonBody, request } from './http';
 
@@ -20,12 +21,25 @@ export function deleteObject(key: string): Promise<DeleteObjectResponse> {
   return request(`/api/objects?key=${encodeURIComponent(key)}`, { method: 'DELETE' }, 'Failed to delete object');
 }
 
-export function requestPresignedUpload(key: string, contentType: string, size?: number): Promise<PresignUploadResponse> {
+export function requestPresignedUpload(
+  key: string,
+  contentType: string,
+  size?: number,
+  overwrite = false,
+): Promise<PresignUploadResponse> {
   return request(
     '/api/objects/presign-upload',
-    jsonBody({ key, content_type: contentType, size }),
+    jsonBody({ key, content_type: contentType, size, overwrite }),
     'Failed to request upload URL',
   );
+}
+
+export function copyObject(source: string, destination: string, overwrite = false): Promise<TransferObjectResponse> {
+  return request('/api/objects/copy', jsonBody({ source, destination, overwrite }), 'Failed to copy file');
+}
+
+export function moveObject(source: string, destination: string, overwrite = false): Promise<TransferObjectResponse> {
+  return request('/api/objects/move', jsonBody({ source, destination, overwrite }), 'Failed to move file');
 }
 
 export function requestPresignedDownload(key: string, filename?: string): Promise<PresignDownloadResponse> {

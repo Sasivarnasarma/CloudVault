@@ -4,6 +4,8 @@ export type Entry =
   | { type: 'folder'; id: string; name: string; folder: FolderObject }
   | { type: 'file'; id: string; name: string; file: FileObject };
 
+export type TransferMode = 'rename' | 'move' | 'copy';
+
 export type SortKey = 'name' | 'modified' | 'size';
 export type SortDir = 'asc' | 'desc';
 

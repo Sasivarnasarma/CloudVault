@@ -8,20 +8,30 @@ import { FilesPage } from './FilesPage';
 vi.mock('../services/healthService', () => ({ fetchHealthStatus: vi.fn() }));
 vi.mock('../services/objectService', () => ({
   listObjects: vi.fn(),
+  copyObject: vi.fn(),
+  moveObject: vi.fn(),
   deleteObject: vi.fn(),
   getObjectMetadata: vi.fn(),
   requestPresignedDownload: vi.fn(),
   requestPresignedUpload: vi.fn(),
 }));
-vi.mock('../services/folderService', () => ({ createFolder: vi.fn(), deleteFolder: vi.fn() }));
+vi.mock('../services/folderService', () => ({
+  createFolder: vi.fn(),
+  deleteFolder: vi.fn(),
+  copyFolder: vi.fn(),
+  moveFolder: vi.fn(),
+}));
 vi.mock('../services/transferService', () => ({ uploadFileDirect: vi.fn(), triggerBrowserDownload: vi.fn() }));
 
-import { createFolder, deleteFolder } from '../services/folderService';
+import { copyFolder, createFolder, deleteFolder, moveFolder } from '../services/folderService';
+import { ApiError } from '../services/http';
 import { fetchHealthStatus } from '../services/healthService';
 import {
+  copyObject,
   deleteObject,
   getObjectMetadata,
   listObjects,
+  moveObject,
   requestPresignedDownload,
   requestPresignedUpload,
 } from '../services/objectService';
@@ -53,6 +63,10 @@ beforeEach(() => {
   listMock.mockImplementation(async (prefix = '') => (prefix === 'Reports/' ? INSIDE : ROOT));
   vi.mocked(deleteObject).mockReset().mockResolvedValue({ success: true, key: '', message: '' });
   vi.mocked(deleteFolder).mockReset().mockResolvedValue({ success: true, prefix: '', deleted_count: 4 });
+  vi.mocked(moveObject).mockReset().mockResolvedValue({ success: true, source: '', destination: '' });
+  vi.mocked(copyObject).mockReset().mockResolvedValue({ success: true, source: '', destination: '' });
+  vi.mocked(moveFolder).mockReset().mockResolvedValue({ success: true, source: '', destination: '', item_count: 2 });
+  vi.mocked(copyFolder).mockReset().mockResolvedValue({ success: true, source: '', destination: '', item_count: 2 });
   vi.mocked(createFolder).mockReset().mockResolvedValue({ success: true, folder: REPORTS });
   vi.mocked(getObjectMetadata).mockReset().mockImplementation(async (key) => makeFile(key));
   vi.mocked(requestPresignedDownload)
@@ -248,7 +262,7 @@ describe('FilesPage', () => {
     const callsBefore = listMock.mock.calls.length;
     await user.upload(input, file);
 
-    await waitFor(() => expect(requestPresignedUpload).toHaveBeenCalledWith('hello.txt', 'text/plain', 5));
+    await waitFor(() => expect(requestPresignedUpload).toHaveBeenCalledWith('hello.txt', 'text/plain', 5, false));
     expect(uploadFileDirect).toHaveBeenCalledWith('https://storage.test/put', file, 'text/plain', expect.any(Function));
     expect(await screen.findByText('1 upload complete')).toBeInTheDocument();
     await waitFor(() => expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore));
@@ -261,6 +275,123 @@ describe('FilesPage', () => {
 
     const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
     await userEvent.upload(input, new File(['x'], 'new.txt', { type: 'text/plain' }));
-    await waitFor(() => expect(requestPresignedUpload).toHaveBeenCalledWith('Reports/new.txt', 'text/plain', 1));
+    await waitFor(() => expect(requestPresignedUpload).toHaveBeenCalledWith('Reports/new.txt', 'text/plain', 1, false));
+  });
+});
+
+
+describe('FilesPage organize actions', () => {
+  const openMenu = async (user: ReturnType<typeof userEvent.setup>, name: string, item: string) => {
+    await user.click(screen.getByRole('button', { name: `More actions for ${name}` }));
+    await user.click(await screen.findByRole('menuitem', { name: item }));
+  };
+
+  it('renames a file from its menu and refreshes the listing', async () => {
+    const user = await renderPage();
+    await openMenu(user, 'report.pdf', 'Rename');
+
+    const dialog = await screen.findByRole('dialog', { name: 'Rename' });
+    const input = within(dialog).getByLabelText('Name');
+    expect(input).toHaveValue('report.pdf');
+    await user.clear(input);
+    await user.type(input, 'final.pdf');
+
+    const callsBefore = listMock.mock.calls.length;
+    await user.click(within(dialog).getByRole('button', { name: 'Rename' }));
+    await waitFor(() => expect(moveObject).toHaveBeenCalledWith('report.pdf', 'final.pdf', false));
+    await waitFor(() => expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('moves a file into another folder from the details panel', async () => {
+    const user = await renderPage();
+    await user.click(screen.getByText('report.pdf'));
+    const details = await screen.findByRole('complementary', { name: 'File details' });
+    await user.click(within(details).getByRole('button', { name: 'Move' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Move to…' });
+    await user.click(await within(dialog).findByRole('button', { name: 'Reports' }));
+    await waitFor(() => expect(listMock).toHaveBeenLastCalledWith('Reports/'));
+    await user.click(within(dialog).getByRole('button', { name: 'Move here' }));
+
+    await waitFor(() => expect(moveObject).toHaveBeenCalledWith('report.pdf', 'Reports/report.pdf', false));
+    // the moved file is no longer selected, so its details panel closes
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'File details' })).not.toBeInTheDocument());
+  });
+
+  it('copies a folder under a new name', async () => {
+    const user = await renderPage();
+    await openMenu(user, 'Reports', 'Copy to…');
+
+    const dialog = await screen.findByRole('dialog', { name: 'Copy to…' });
+    const input = within(dialog).getByLabelText('Name');
+    await user.clear(input);
+    await user.type(input, 'Reports backup');
+    await user.click(within(dialog).getByRole('button', { name: 'Copy here' }));
+
+    await waitFor(() => expect(copyFolder).toHaveBeenCalledWith('Reports/', 'Reports backup'));
+  });
+
+  it('copying keeps the original selected', async () => {
+    const user = await renderPage();
+    await user.click(screen.getByText('report.pdf'));
+    const details = await screen.findByRole('complementary', { name: 'File details' });
+    await user.click(within(details).getByRole('button', { name: 'Copy' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Copy to…' });
+    const input = within(dialog).getByLabelText('Name');
+    await user.clear(input);
+    await user.type(input, 'report copy.pdf');
+    await user.click(within(dialog).getByRole('button', { name: 'Copy here' }));
+
+    await waitFor(() => expect(copyObject).toHaveBeenCalledWith('report.pdf', 'report copy.pdf', false));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('complementary', { name: 'File details' })).toBeInTheDocument();
+  });
+
+  it('offers to replace when the new name is already taken', async () => {
+    vi.mocked(moveObject).mockRejectedValueOnce(new ApiError('A file with this name already exists', 409));
+    const user = await renderPage();
+    await openMenu(user, 'report.pdf', 'Rename');
+
+    const dialog = await screen.findByRole('dialog', { name: 'Rename' });
+    await user.clear(within(dialog).getByLabelText('Name'));
+    await user.type(within(dialog).getByLabelText('Name'), 'notes.md');
+    await user.click(within(dialog).getByRole('button', { name: 'Rename' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('already exists');
+    await user.click(within(dialog).getByRole('button', { name: 'Replace existing file' }));
+    await waitFor(() => expect(moveObject).toHaveBeenLastCalledWith('report.pdf', 'notes.md', true));
+  });
+});
+
+describe('FilesPage upload conflicts', () => {
+  const pickFile = async (user: ReturnType<typeof userEvent.setup>, name: string) => {
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    await user.upload(input, new File(['data'], name, { type: 'text/plain' }));
+  };
+
+  it('lets the user replace a file that already exists', async () => {
+    vi.mocked(requestPresignedUpload).mockRejectedValueOnce(new ApiError('A file with this name already exists', 409));
+    const user = await renderPage();
+    await pickFile(user, 'report.pdf');
+
+    expect(await screen.findByText('1 file already exists')).toBeInTheDocument();
+    expect(uploadFileDirect).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Replace report.pdf' }));
+    await waitFor(() => expect(requestPresignedUpload).toHaveBeenLastCalledWith('report.pdf', 'text/plain', 4, true));
+    await waitFor(() => expect(uploadFileDirect).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('1 upload complete')).toBeInTheDocument();
+  });
+
+  it('lets the user skip a conflicting file', async () => {
+    vi.mocked(requestPresignedUpload).mockRejectedValueOnce(new ApiError('A file with this name already exists', 409));
+    const user = await renderPage();
+    await pickFile(user, 'report.pdf');
+
+    await user.click(await screen.findByRole('button', { name: 'Skip report.pdf' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Uploads' })).not.toBeInTheDocument());
+    expect(uploadFileDirect).not.toHaveBeenCalled();
   });
 });
