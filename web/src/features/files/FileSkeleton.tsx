@@ -1,18 +1,31 @@
-export function FileSkeleton() {
-  return (
-    <div className="w-full space-y-3 p-4">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div
-          key={i}
-          className="flex items-center justify-between p-3.5 rounded-xl bg-slate-800/40 border border-slate-800 animate-pulse"
-        >
-          <div className="flex items-center gap-3 w-1/3">
-            <div className="w-8 h-8 rounded-lg bg-slate-700/60 shrink-0" />
-            <div className="h-4 bg-slate-700/60 rounded w-full" />
+import { cn } from '../../lib/cn';
+
+export function FileSkeleton({ view }: { view: 'grid' | 'list' }) {
+  const bar = 'animate-pulse rounded-md bg-sunken';
+  if (view === 'grid') {
+    return (
+      <div
+        role="status"
+        aria-label="Loading files"
+        className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-3 p-5"
+      >
+        {Array.from({ length: 10 }, (_, i) => (
+          <div key={i} className="rounded-2xl border border-line bg-surface p-4">
+            <div className={cn(bar, 'mb-6 size-12 rounded-xl')} />
+            <div className={cn(bar, 'mb-2 h-3.5 w-3/4')} />
+            <div className={cn(bar, 'h-3 w-1/2')} />
           </div>
-          <div className="h-4 bg-slate-700/60 rounded w-20 hidden md:block" />
-          <div className="h-4 bg-slate-700/60 rounded w-28 hidden sm:block" />
-          <div className="w-8 h-8 rounded-lg bg-slate-700/60 shrink-0" />
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div role="status" aria-label="Loading files" className="divide-y divide-line px-2">
+      {Array.from({ length: 8 }, (_, i) => (
+        <div key={i} className="flex items-center gap-3 px-4 py-3">
+          <div className={cn(bar, 'size-8 rounded-lg')} />
+          <div className={cn(bar, 'h-3.5 flex-1 max-w-64')} />
+          <div className={cn(bar, 'ml-auto hidden h-3 w-16 sm:block')} />
         </div>
       ))}
     </div>

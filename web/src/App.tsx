@@ -1,397 +1,447 @@
-import { useEffect, useState } from 'react';
-import {
-  Cloud,
-  HardDrive,
-  ShieldCheck,
-  RefreshCw,
-  FolderPlus,
-  Upload,
-  Database,
-  ArrowLeft,
-  AlertCircle,
-  Search,
-  Filter,
-} from 'lucide-react';
+import { AlertCircle, CloudUpload, RefreshCw } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Toaster, toast } from 'sonner';
+import { Button } from './components/common/Button';
+import { ConfirmDialog } from './components/common/ConfirmDialog';
+import { Sidebar } from './components/layout/Sidebar';
+import { Toolbar } from './components/layout/Toolbar';
+import { EmptyFolderState } from './features/files/EmptyFolderState';
+import { FileBrowser, type ViewMode } from './features/files/FileBrowser';
+import { FileSkeleton } from './features/files/FileSkeleton';
+import { Inspector } from './features/files/Inspector';
+import { CreateFolderModal } from './features/folders/CreateFolderModal';
+import { UploadTray } from './features/upload/UploadTray';
+import { useObjects } from './hooks/useObjects';
+import { useTheme } from './hooks/useTheme';
+import { useUpload } from './hooks/useUpload';
+import { errorMessage } from './lib/cn';
+import { sortEntries, type Entry, type SortDir, type SortKey } from './lib/entries';
+import { categoryOf, matchesFilter, type CategoryFilter } from './lib/fileKind';
+import { formatBytes } from './lib/formatters';
 import { fetchHealthStatus } from './services/apiClient';
 import { deleteFolder, deleteObject } from './services/storageApi';
-import {
-  requestPresignedDownload,
-  triggerBrowserDownload,
-} from './services/uploadService';
-import { useObjects } from './hooks/useObjects';
-import { useUpload } from './hooks/useUpload';
-import { Breadcrumbs } from './components/common/Breadcrumbs';
-import { FileList } from './features/files/FileList';
-import { FileSkeleton } from './features/files/FileSkeleton';
-import { EmptyFolderState } from './features/files/EmptyFolderState';
-import { FileDetailsModal } from './features/files/FileDetailsModal';
-import { UploadModal } from './features/upload/UploadModal';
-import { CreateFolderModal } from './features/folders/CreateFolderModal';
-import { formatBytes } from './lib/formatters';
-import type { FileObject, HealthResponse } from './types';
+import { requestPresignedDownload, triggerBrowserDownload } from './services/uploadService';
+import type { HealthResponse } from './types';
+
+const VIEW_KEY = 'cloudvault_view';
+
+function loadView(): ViewMode {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid';
+  } catch {
+    return 'grid';
+  }
+}
+
+function hasFiles(e: DragEvent): boolean {
+  return Array.from(e.dataTransfer?.types ?? []).includes('Files');
+}
 
 export function App() {
-  const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [healthLoading, setHealthLoading] = useState<boolean>(true);
-  const [healthError, setHealthError] = useState<string | null>(null);
-  const [actionNotice, setActionNotice] = useState<string | null>(null);
-
-  // Search & Filter State
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'documents' | 'images' | 'media'>('all');
-
-  // Modal States
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
-  const [isCreateFolderModalOpen, setIsCreateFolderModalOpen] = useState<boolean>(false);
-  const [selectedFileForDetails, setSelectedFileForDetails] = useState<FileObject | null>(null);
-
-  const {
-    currentPrefix,
-    data,
-    loading,
-    error,
-    navigateToFolder,
-    navigateUp,
-    refetch,
-  } = useObjects('');
-
+  const { theme, toggleTheme } = useTheme();
+  const { currentPrefix, data, loading, error, navigateToFolder, navigateUp, refetch } = useObjects('');
   const { queue, isUploading, startUploads, clearQueue } = useUpload();
 
-  const loadHealth = async () => {
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [healthLoading, setHealthLoading] = useState(true);
+  const [healthError, setHealthError] = useState(false);
+
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<CategoryFilter>('all');
+  const [view, setView] = useState<ViewMode>(loadView);
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'name', dir: 'asc' });
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Entry | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [dragging, setDragging] = useState(false);
+
+  const searchRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
+
+  const loadHealth = useCallback(async () => {
     setHealthLoading(true);
-    setHealthError(null);
+    setHealthError(false);
     try {
-      const healthData = await fetchHealthStatus();
-      setHealth(healthData);
-    } catch (err: any) {
-      setHealthError(err.message || 'Failed to connect to backend server');
+      setHealth(await fetchHealthStatus());
+    } catch {
+      setHealthError(true);
     } finally {
       setHealthLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadHealth();
+  }, [loadHealth]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_KEY, view);
+    } catch {
+      /* storage unavailable: preference just won't persist */
+    }
+  }, [view]);
+
+  // Reset transient state when moving between folders.
+  useEffect(() => {
+    setSelectedId(null);
+    setSearch('');
+  }, [currentPrefix]);
+
+  const allEntries = useMemo<Entry[]>(() => {
+    if (!data) return [];
+    return [
+      ...data.folders.map((folder): Entry => ({ type: 'folder', id: folder.prefix, name: folder.name, folder })),
+      ...data.objects.map((file): Entry => ({ type: 'file', id: file.key, name: file.name, file })),
+    ];
+  }, [data]);
+
+  const entries = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const visible = allEntries.filter((e) => {
+      if (q && !e.name.toLowerCase().includes(q)) return false;
+      if (filter === 'all') return true;
+      return e.type === 'file' && matchesFilter(e.file, filter);
+    });
+    return sortEntries(visible, sort.key, sort.dir);
+  }, [allEntries, search, filter, sort]);
+
+  const counts = useMemo<Record<CategoryFilter, number>>(() => {
+    const files = data?.objects ?? [];
+    const count = (c: CategoryFilter) => files.filter((f) => categoryOf(f) === c).length;
+    return { all: files.length, documents: count('documents'), images: count('images'), media: count('media') };
+  }, [data]);
+
+  const selectedFile = useMemo(() => {
+    const entry = allEntries.find((e) => e.id === selectedId);
+    return entry?.type === 'file' ? entry.file : null;
+  }, [allEntries, selectedId]);
+
+  const filtered = search.trim() !== '' || filter !== 'all';
+
+  const handleDownload = useCallback(async (key: string, name: string) => {
+    try {
+      const res = await requestPresignedDownload(key, name);
+      triggerBrowserDownload(res.download_url);
+      toast.success(`Downloading ${name}`);
+    } catch (err) {
+      toast.error(errorMessage(err, `Couldn’t download ${name}`));
+    }
   }, []);
 
-  const handleDownloadFile = async (key: string, name: string) => {
-    try {
-      setActionNotice(`Generating download URL for '${name}'...`);
-      const presignRes = await requestPresignedDownload(key, name);
-      triggerBrowserDownload(presignRes.download_url);
-      setActionNotice(`Download started for '${name}'.`);
-    } catch (err: any) {
-      alert(err.message || 'Failed to download file');
-    }
-  };
-
-  const handleDeleteFile = async (key: string) => {
-    if (!window.confirm(`Are you sure you want to delete '${key}'?`)) return;
-    try {
-      await deleteObject(key);
-      setActionNotice(`Object '${key}' deleted successfully.`);
-      refetch();
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete object');
-    }
-  };
-
-  const handleDeleteFolder = async (prefix: string) => {
-    if (
-      !window.confirm(
-        `Are you sure you want to delete folder '${prefix}' and all objects inside it?`
-      )
-    )
-      return;
-    try {
-      const res = await deleteFolder(prefix);
-      setActionNotice(`Folder '${prefix}' deleted (${res.deleted_count} items).`);
-      refetch();
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete folder');
-    }
-  };
-
-  const handleStartUploads = (files: File[]) => {
-    startUploads(files, currentPrefix, () => {
-      refetch();
-    });
-  };
-
-  // Filter Objects by Search & Category
-  const filteredFolders = (data?.folders || []).filter((f) =>
-    f.name.toLowerCase().includes(searchQuery.toLowerCase().trim())
+  const handleUploadFiles = useCallback(
+    (files: File[]) => {
+      if (files.length === 0) return;
+      if (isUploading) {
+        toast.info('Wait for the current uploads to finish.');
+        return;
+      }
+      startUploads(files, currentPrefix, () => {
+        refetch();
+      });
+    },
+    [isUploading, startUploads, currentPrefix, refetch],
   );
 
-  const filteredObjects = (data?.objects || []).filter((file) => {
-    const matchesSearch = file.name.toLowerCase().includes(searchQuery.toLowerCase().trim());
-    if (!matchesSearch) return false;
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      if (pendingDelete.type === 'folder') {
+        const res = await deleteFolder(pendingDelete.folder.prefix);
+        toast.success(`Deleted “${pendingDelete.name}” (${res.deleted_count} items)`);
+      } else {
+        await deleteObject(pendingDelete.file.key);
+        toast.success(`Deleted “${pendingDelete.name}”`);
+        if (selectedId === pendingDelete.id) setSelectedId(null);
+      }
+      setPendingDelete(null);
+      refetch();
+    } catch (err) {
+      toast.error(errorMessage(err, `Couldn’t delete ${pendingDelete.name}`));
+    } finally {
+      setDeleting(false);
+    }
+  };
 
-    if (categoryFilter === 'all') return true;
+  const changeSort = (key: SortKey, dir?: SortDir) => {
+    setSort((prev) => ({
+      key,
+      dir: dir ?? (prev.key === key ? (prev.dir === 'asc' ? 'desc' : 'asc') : 'asc'),
+    }));
+  };
 
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    if (categoryFilter === 'images') {
-      return ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext) || file.content_type.startsWith('image/');
-    }
-    if (categoryFilter === 'documents') {
-      return ['pdf', 'doc', 'docx', 'txt', 'md', 'csv', 'xlsx'].includes(ext) || file.content_type.includes('pdf') || file.content_type.includes('text');
-    }
-    if (categoryFilter === 'media') {
-      return ['mp3', 'wav', 'mp4', 'mkv', 'mov', 'webm'].includes(ext) || file.content_type.startsWith('audio/') || file.content_type.startsWith('video/');
-    }
-    return true;
-  });
+  // Window-level drag & drop upload.
+  useEffect(() => {
+    const onEnter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      dragDepth.current += 1;
+      setDragging(true);
+    };
+    const onLeave = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      dragDepth.current = Math.max(0, dragDepth.current - 1);
+      if (dragDepth.current === 0) setDragging(false);
+    };
+    const onOver = (e: DragEvent) => {
+      if (hasFiles(e)) e.preventDefault();
+    };
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      dragDepth.current = 0;
+      setDragging(false);
+      handleUploadFiles(Array.from(e.dataTransfer?.files ?? []));
+    };
+    window.addEventListener('dragenter', onEnter);
+    window.addEventListener('dragleave', onLeave);
+    window.addEventListener('dragover', onOver);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragenter', onEnter);
+      window.removeEventListener('dragleave', onLeave);
+      window.removeEventListener('dragover', onOver);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, [handleUploadFiles]);
+
+  // Keyboard: "/" focuses search, Escape closes the inspector.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if (e.key === '/' && !typing) {
+        e.preventDefault();
+        searchRef.current?.focus();
+      } else if (e.key === 'Escape' && !typing) {
+        setSelectedId(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const openUploadPicker = () => fileInputRef.current?.click();
+  const closeNavAnd = (fn: () => void) => () => {
+    setNavOpen(false);
+    fn();
+  };
+
+  const sidebar = (
+    <Sidebar
+      health={health}
+      healthLoading={healthLoading}
+      healthError={healthError}
+      filter={filter}
+      counts={counts}
+      theme={theme}
+      onFilterChange={(f) => {
+        setFilter(f);
+        setNavOpen(false);
+      }}
+      onUpload={closeNavAnd(openUploadPicker)}
+      onNewFolder={closeNavAnd(() => setFolderDialogOpen(true))}
+      onToggleTheme={toggleTheme}
+      onNavigateHome={closeNavAnd(() => navigateToFolder(''))}
+    />
+  );
+
+  const folderCount = data?.folders.length ?? 0;
+  const fileCount = data?.objects.length ?? 0;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      {/* Header Bar */}
-      <header className="border-b border-slate-800/80 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-600/20 text-indigo-400 rounded-xl border border-indigo-500/30">
-              <Cloud className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-                CloudVault
-                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
-                  v0.1.0
-                </span>
-              </h1>
-            </div>
-          </div>
+    <div className="flex h-full bg-canvas text-ink">
+      <aside className="hidden w-64 shrink-0 border-r border-line bg-surface lg:block">{sidebar}</aside>
 
-          <div className="flex items-center gap-4">
-            {/* Status indicator */}
-            <div className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800">
-              {healthLoading ? (
-                <span className="flex items-center gap-2 text-slate-400">
-                  <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" />
-                  Connecting API...
-                </span>
-              ) : healthError ? (
-                <span className="flex items-center gap-2 text-amber-400">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                  API Offline
-                </span>
-              ) : (
-                <span className="flex items-center gap-2 text-emerald-400">
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      health?.storage_connected ? 'bg-emerald-400' : 'bg-amber-400'
-                    }`}
-                  />
-                  Backend Online ({health?.storage_provider.toUpperCase()}
-                  {health?.storage_connected ? '' : ' - S3 Disconnected'})
-                </span>
-              )}
-            </div>
-
-            <button
-              onClick={() => {
-                loadHealth();
-                refetch();
-              }}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-              title="Refresh"
+      <AnimatePresence>
+        {navOpen && (
+          <>
+            <motion.div
+              className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-[3px] lg:hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setNavOpen(false)}
+            />
+            <motion.aside
+              className="fixed inset-y-0 left-0 z-50 w-72 border-r border-line bg-surface shadow-pop lg:hidden"
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', stiffness: 400, damping: 40 }}
             >
-              <RefreshCw className={`w-4 h-4 ${loading || healthLoading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Layout Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6">
-        {/* Action Notice Alert */}
-        {actionNotice && (
-          <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs flex justify-between items-center">
-            <span>{actionNotice}</span>
-            <button
-              onClick={() => setActionNotice(null)}
-              className="text-slate-400 hover:text-white font-bold text-sm ml-2"
-            >
-              ✕
-            </button>
-          </div>
+              {sidebar}
+            </motion.aside>
+          </>
         )}
+      </AnimatePresence>
 
-        {/* Top Banner Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center gap-4">
-            <div className="p-3 bg-indigo-500/10 text-indigo-400 rounded-lg border border-indigo-500/20">
-              <Database className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Provider
-              </p>
-              <p className="text-base font-semibold text-white capitalize truncate">
-                {health?.storage_provider || 'Loading...'}
-              </p>
-            </div>
-          </div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Toolbar
+          currentPrefix={currentPrefix}
+          rootLabel={health?.bucket ?? 'Home'}
+          search={search}
+          searchRef={searchRef}
+          view={view}
+          sort={sort}
+          refreshing={loading || healthLoading}
+          onNavigate={navigateToFolder}
+          onNavigateUp={navigateUp}
+          onSearchChange={setSearch}
+          onViewChange={setView}
+          onSortChange={changeSort}
+          onRefresh={() => {
+            loadHealth();
+            refetch();
+          }}
+          onOpenNav={() => setNavOpen(true)}
+        />
 
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center gap-4">
-            <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">
-              <HardDrive className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Visible Size
-              </p>
-              <p className="text-base font-semibold text-white font-mono">
-                {formatBytes(data?.total_size || 0)}
-              </p>
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center gap-4">
-            <div className="p-3 bg-cyan-500/10 text-cyan-400 rounded-lg border border-cyan-500/20">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Total Items
-              </p>
-              <p className="text-base font-semibold text-white font-mono">
-                {data?.total_count || 0}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Search & Filter Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search objects in current directory..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-900 rounded-lg border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-all"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            <span className="text-xs text-slate-500 flex items-center gap-1 pr-1 font-medium">
-              <Filter className="w-3.5 h-3.5" /> Filter:
-            </span>
-            {(['all', 'documents', 'images', 'media'] as const).map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setCategoryFilter(cat)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium capitalize transition-colors ${
-                  categoryFilter === cat
-                    ? 'bg-indigo-600 text-white font-semibold'
-                    : 'bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-800'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Controls Bar: Breadcrumbs & Action Buttons */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-          <div className="flex items-center gap-2 min-w-0">
-            {currentPrefix && (
-              <button
-                onClick={navigateUp}
-                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg border border-slate-700 transition-colors"
-                title="Go up one folder"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-            )}
-            <Breadcrumbs currentPrefix={currentPrefix} onNavigate={navigateToFolder} />
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => setIsCreateFolderModalOpen(true)}
-              className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-lg border border-slate-700 text-xs transition-colors"
-            >
-              <FolderPlus className="w-4 h-4 text-amber-400" />
-              New Folder
-            </button>
-            <button
-              onClick={() => setIsUploadModalOpen(true)}
-              className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg text-xs transition-colors"
-            >
-              <Upload className="w-4 h-4" />
-              Upload
-            </button>
-          </div>
-        </div>
-
-        {/* Main File Browser Area */}
-        <div className="flex-1 flex flex-col">
-          {error ? (
-            <div className="p-6 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 shrink-0" />
-              <div>
-                <p className="font-semibold">Unable to list objects</p>
-                <p className="text-xs opacity-80">{error}</p>
+        <div className="flex min-h-0 flex-1">
+          <main className="min-w-0 flex-1 overflow-y-auto" aria-busy={loading}>
+            {error ? (
+              <div className="flex h-full min-h-72 flex-col items-center justify-center px-6 text-center">
+                <div className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-danger-soft text-danger">
+                  <AlertCircle className="size-7" />
+                </div>
+                <h2 className="text-base font-semibold">Unable to load files</h2>
+                <p className="mt-1 max-w-sm text-sm text-ink-3">{error}</p>
+                <Button className="mt-5" onClick={() => refetch()}>
+                  <RefreshCw className="size-4" />
+                  Try again
+                </Button>
               </div>
-            </div>
-          ) : loading ? (
-            <FileSkeleton />
-          ) : !data || (filteredFolders.length === 0 && filteredObjects.length === 0) ? (
-            <EmptyFolderState currentPrefix={currentPrefix} />
-          ) : (
-            <FileList
-              folders={filteredFolders}
-              objects={filteredObjects}
-              onFolderClick={navigateToFolder}
-              onSelectFile={(file) => setSelectedFileForDetails(file)}
-              onDownloadFile={handleDownloadFile}
-              onDeleteFile={handleDeleteFile}
-              onDeleteFolder={handleDeleteFolder}
-            />
-          )}
-        </div>
-      </main>
+            ) : loading ? (
+              <FileSkeleton view={view} />
+            ) : entries.length === 0 ? (
+              <EmptyFolderState
+                filtered={filtered}
+                onClearFilters={() => {
+                  setSearch('');
+                  setFilter('all');
+                }}
+              />
+            ) : (
+              <FileBrowser
+                key={`${currentPrefix}|${view}`}
+                entries={entries}
+                view={view}
+                selectedId={selectedId}
+                sort={sort}
+                onSortChange={changeSort}
+                onOpenFolder={navigateToFolder}
+                onSelectFile={(id) => setSelectedId((cur) => (cur === id ? null : id))}
+                onDownload={handleDownload}
+                onDelete={setPendingDelete}
+              />
+            )}
+          </main>
 
-      {/* Upload Modal */}
-      <UploadModal
-        isOpen={isUploadModalOpen}
-        onClose={() => setIsUploadModalOpen(false)}
-        targetPrefix={currentPrefix}
-        queue={queue}
-        isUploading={isUploading}
-        onStartUpload={handleStartUploads}
-        onClearQueue={clearQueue}
+          <AnimatePresence initial={false}>
+            {selectedFile && (
+              <motion.aside
+                key="inspector"
+                aria-label="File details"
+                className="fixed inset-y-0 right-0 z-30 w-[min(22rem,100vw)] overflow-hidden border-l border-line bg-surface shadow-pop xl:static xl:z-auto xl:shadow-none"
+                initial={{ x: 40, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 40, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 38 }}
+              >
+                <Inspector
+                  file={selectedFile}
+                  bucket={health?.bucket}
+                  onClose={() => setSelectedId(null)}
+                  onDownload={handleDownload}
+                  onDelete={(file) => setPendingDelete({ type: 'file', id: file.key, name: file.name, file })}
+                />
+              </motion.aside>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <footer className="flex items-center gap-3 border-t border-line bg-surface px-5 py-2 text-xs text-ink-3">
+          <span>
+            {folderCount} folder{folderCount === 1 ? '' : 's'}, {fileCount} file{fileCount === 1 ? '' : 's'}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span className="font-mono">{formatBytes(data?.total_size ?? 0, 1)}</span>
+          {filtered && !loading && <span className="ml-auto">{entries.length} shown</span>}
+        </footer>
+      </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        aria-hidden="true"
+        tabIndex={-1}
+        onChange={(e) => {
+          handleUploadFiles(Array.from(e.target.files ?? []));
+          e.target.value = '';
+        }}
       />
 
-      {/* Create Folder Modal */}
       <CreateFolderModal
-        isOpen={isCreateFolderModalOpen}
-        onClose={() => setIsCreateFolderModalOpen(false)}
+        isOpen={folderDialogOpen}
+        onClose={() => setFolderDialogOpen(false)}
         targetPrefix={currentPrefix}
-        onFolderCreated={() => {
-          setActionNotice('Folder created successfully.');
+        onFolderCreated={(name) => {
+          toast.success(`Created folder “${name}”`);
           refetch();
         }}
       />
 
-      {/* File Details Inspector Modal */}
-      <FileDetailsModal
-        isOpen={!!selectedFileForDetails}
-        file={selectedFileForDetails}
-        onClose={() => setSelectedFileForDetails(null)}
-        onDownload={handleDownloadFile}
-        bucketName={health?.bucket}
+      <ConfirmDialog
+        open={!!pendingDelete}
+        loading={deleting}
+        title={pendingDelete?.type === 'folder' ? 'Delete folder?' : 'Delete file?'}
+        description={
+          pendingDelete?.type === 'folder'
+            ? `“${pendingDelete.name}” and everything inside it will be permanently deleted.`
+            : `“${pendingDelete?.name ?? ''}” will be permanently deleted. This can’t be undone.`
+        }
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
+
+      <UploadTray queue={queue} isUploading={isUploading} onClear={clearQueue} />
+
+      <AnimatePresence>
+        {dragging && (
+          <motion.div
+            className="pointer-events-none fixed inset-0 z-[60] flex items-center justify-center bg-accent/10 p-6 backdrop-blur-[2px]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div className="flex h-full w-full flex-col items-center justify-center rounded-3xl border-2 border-dashed border-accent bg-surface/80">
+              <CloudUpload className="mb-3 size-12 text-accent" strokeWidth={1.5} />
+              <p className="text-lg font-semibold">Drop to upload</p>
+              <p className="mt-1 text-sm text-ink-3">Files go to {currentPrefix || 'the root folder'}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <Toaster
+        theme={theme}
+        position="bottom-left"
+        toastOptions={{
+          style: {
+            background: 'var(--surface-2)',
+            color: 'var(--ink)',
+            border: '1px solid var(--line)',
+            fontFamily: 'var(--font-sans)',
+          },
+        }}
       />
     </div>
   );

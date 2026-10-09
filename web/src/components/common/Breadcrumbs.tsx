@@ -1,51 +1,42 @@
-import { ChevronRight, Home } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
+import { cn } from '../../lib/cn';
 
 interface BreadcrumbsProps {
   currentPrefix: string;
+  rootLabel: string;
   onNavigate: (prefix: string) => void;
 }
 
-export function Breadcrumbs({ currentPrefix, onNavigate }: BreadcrumbsProps) {
+export function Breadcrumbs({ currentPrefix, rootLabel, onNavigate }: BreadcrumbsProps) {
   const parts = currentPrefix ? currentPrefix.replace(/\/+$/, '').split('/') : [];
-
-  const getPrefixForIndex = (index: number): string => {
-    return parts.slice(0, index + 1).join('/') + '/';
-  };
+  const crumbs = [
+    { label: rootLabel, prefix: '' },
+    ...parts.map((part, i) => ({ label: part, prefix: parts.slice(0, i + 1).join('/') + '/' })),
+  ];
 
   return (
-    <nav className="flex items-center gap-1.5 text-sm font-medium text-slate-400 overflow-x-auto py-1 scrollbar-none">
-      <button
-        onClick={() => onNavigate('')}
-        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors ${
-          !currentPrefix
-            ? 'text-white bg-slate-800 font-semibold'
-            : 'hover:text-white hover:bg-slate-800/60'
-        }`}
-      >
-        <Home className="w-4 h-4 text-indigo-400" />
-        <span>Root</span>
-      </button>
-
-      {parts.map((part, index) => {
-        const isLast = index === parts.length - 1;
-        const targetPrefix = getPrefixForIndex(index);
-
-        return (
-          <div key={targetPrefix} className="flex items-center gap-1.5 shrink-0">
-            <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />
-            <button
-              onClick={() => onNavigate(targetPrefix)}
-              className={`px-2.5 py-1 rounded-lg transition-colors truncate max-w-40 ${
-                isLast
-                  ? 'text-white bg-slate-800 font-semibold border border-slate-700'
-                  : 'hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              {part}
-            </button>
-          </div>
-        );
-      })}
+    <nav aria-label="Folder path" className="min-w-0 flex-1">
+      <ol className="flex items-center gap-0.5 overflow-x-auto whitespace-nowrap [scrollbar-width:none]">
+        {crumbs.map((crumb, i) => {
+          const isLast = i === crumbs.length - 1;
+          return (
+            <li key={crumb.prefix} className="flex shrink-0 items-center gap-0.5">
+              {i > 0 && <ChevronRight className="size-3.5 text-ink-3" aria-hidden="true" />}
+              <button
+                type="button"
+                onClick={() => onNavigate(crumb.prefix)}
+                aria-current={isLast ? 'page' : undefined}
+                className={cn(
+                  'max-w-48 truncate rounded-md px-2 py-1 text-sm transition',
+                  isLast ? 'font-semibold text-ink' : 'text-ink-3 hover:bg-sunken hover:text-ink',
+                )}
+              >
+                {crumb.label}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
     </nav>
   );
 }
