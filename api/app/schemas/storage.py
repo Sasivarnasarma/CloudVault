@@ -31,3 +31,15 @@ class PresignedDownloadData(BaseModel):
     download_url: str
     key: str
     expires_in: int
+
+
+class MultipartUploadInfo(BaseModel):
+    upload_id: str
+    part_size: int
+    part_count: int
+
+
+class UploadedPartInfo(BaseModel):
+    part_number: int
+    size: int
+    etag: str

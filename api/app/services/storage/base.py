@@ -2,9 +2,11 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
 from app.schemas.storage import (
     FolderItem,
+    MultipartUploadInfo,
     ObjectMetadata,
     PresignedDownloadData,
     PresignedUploadData,
+    UploadedPartInfo,
 )
 
 
@@ -95,6 +97,35 @@ class BaseStorageService(ABC):
     @abstractmethod
     def move_folder(self, source_prefix: str, destination_prefix: str) -> int:
         """Recursively move a folder. Never overwrites; returns the number of objects moved."""
+        pass
+
+    @abstractmethod
+    def create_multipart_upload(
+        self, key: str, content_type: str, size: int, allow_overwrite: bool = False
+    ) -> MultipartUploadInfo:
+        """Start a multipart upload and decide the part size."""
+        pass
+
+    @abstractmethod
+    def presign_upload_parts(
+        self, key: str, upload_id: str, part_numbers: List[int], expires_in: int = 3600
+    ) -> List[Tuple[int, str]]:
+        """Presigned PUT URLs for the given part numbers, as (part_number, url) pairs."""
+        pass
+
+    @abstractmethod
+    def list_uploaded_parts(self, key: str, upload_id: str) -> List[UploadedPartInfo]:
+        """Parts already stored for an upload (used to resume)."""
+        pass
+
+    @abstractmethod
+    def complete_multipart_upload(self, key: str, upload_id: str, part_count: int) -> Optional[str]:
+        """Assemble the uploaded parts into the object. Returns its ETag."""
+        pass
+
+    @abstractmethod
+    def abort_multipart_upload(self, key: str, upload_id: str) -> None:
+        """Discard an upload and free the storage used by its parts."""
         pass
 
     @abstractmethod

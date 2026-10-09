@@ -57,7 +57,7 @@ export function FilesPage() {
     navigateUp,
     refetch,
   } = useObjects();
-  const { queue, isUploading, startUploads, replaceItem, dismissItem, clearQueue } = useUpload();
+  const { queue, isUploading, startUploads, replaceItem, retryItem, cancelItem, dismissItem, clearQueue } = useUpload();
 
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthLoading, setHealthLoading] = useState(true);
@@ -153,15 +153,12 @@ export function FilesPage() {
   const handleUploadFiles = useCallback(
     (files: File[]) => {
       if (files.length === 0) return;
-      if (isUploading) {
-        toast.info('Wait for the current uploads to finish.');
-        return;
-      }
       startUploads(files, currentPrefix, () => {
         refetch();
       });
     },
-    [isUploading, startUploads, currentPrefix, refetch],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [startUploads, currentPrefix, refetch],
   );
 
   const confirmDelete = async () => {
@@ -481,6 +478,8 @@ export function FilesPage() {
         onClear={clearQueue}
         onReplace={(item) => replaceItem(item, refetch)}
         onSkip={dismissItem}
+        onCancel={cancelItem}
+        onRetry={(item) => retryItem(item, refetch)}
       />
 
       <AnimatePresence>

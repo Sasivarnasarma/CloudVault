@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, ChevronDown, CopyX, Loader2, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, CopyX, Loader2, Slash, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useState } from 'react';
 import { Button, IconButton } from '../../components/common/Button';
@@ -12,28 +12,35 @@ interface UploadTrayProps {
   onClear: () => void;
   onReplace: (item: UploadItem) => void;
   onSkip: (id: string) => void;
+  onCancel: (id: string) => void;
+  onRetry: (item: UploadItem) => void;
 }
 
 function StatusIcon({ status }: { status: UploadItem['status'] }) {
   if (status === 'completed') return <CheckCircle2 className="size-4 text-accent" aria-label="Uploaded" />;
   if (status === 'error') return <AlertCircle className="size-4 text-danger" aria-label="Failed" />;
+  if (status === 'cancelled') return <Slash className="size-4 text-ink-3" aria-label="Cancelled" />;
   if (status === 'conflict') return <CopyX className="size-4 text-folder-deep" aria-label="Already exists" />;
   if (status === 'uploading') return <Loader2 className="size-4 animate-spin text-ink-2" aria-label="Uploading" />;
   return <span className="size-2 rounded-full bg-line-strong" aria-label="Waiting" />;
 }
 
 function heading(queue: UploadItem[], isUploading: boolean): string {
-  const done = queue.filter((q) => q.status === 'completed').length;
-  const conflicts = queue.filter((q) => q.status === 'conflict').length;
-  const failed = queue.filter((q) => q.status === 'error').length;
+  const count = (status: UploadItem['status']) => queue.filter((q) => q.status === status).length;
+  const done = count('completed');
+  const conflicts = count('conflict');
+  const failed = count('error') + count('cancelled');
 
-  if (isUploading) return `Uploading ${Math.min(done + conflicts + failed + 1, queue.length)} of ${queue.length}`;
+  if (isUploading) {
+    const active = queue.filter((q) => q.status === 'uploading' || q.status === 'pending').length;
+    return `Uploading ${queue.length - active + 1} of ${queue.length}`;
+  }
   if (conflicts) return `${conflicts} file${conflicts === 1 ? '' : 's'} already exist${conflicts === 1 ? 's' : ''}`;
   if (failed) return `${done} uploaded, ${failed} failed`;
   return `${done} upload${done === 1 ? '' : 's'} complete`;
 }
 
-export function UploadTray({ queue, isUploading, onClear, onReplace, onSkip }: UploadTrayProps) {
+export function UploadTray({ queue, isUploading, onClear, onReplace, onSkip, onCancel, onRetry }: UploadTrayProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -65,58 +72,99 @@ export function UploadTray({ queue, isUploading, onClear, onReplace, onSkip }: U
 
           {!collapsed && (
             <ul className="max-h-64 divide-y divide-line overflow-y-auto border-t border-line">
-              {queue.map((item) => (
-                <li key={item.id} className="px-4 py-2.5">
-                  <div className="flex items-center gap-2.5">
-                    <StatusIcon status={item.status} />
-                    <span className="flex-1 truncate text-sm text-ink" title={item.file.name}>
-                      {item.file.name}
-                    </span>
-                    <span className="font-mono text-xs text-ink-3">{formatBytes(item.file.size, 1)}</span>
-                  </div>
-                  {item.status === 'uploading' && (
-                    <div
-                      role="progressbar"
-                      aria-valuenow={item.progress}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      className="mt-2 h-1 overflow-hidden rounded-full bg-sunken"
-                    >
-                      <motion.div
-                        className="h-full rounded-full bg-accent"
-                        animate={{ width: `${item.progress}%` }}
-                        transition={{ ease: 'easeOut', duration: 0.2 }}
-                      />
+              {queue.map((item) => {
+                const inFlight = item.status === 'uploading' || item.status === 'pending';
+                return (
+                  <li key={item.id} className="px-4 py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <StatusIcon status={item.status} />
+                      <span className="flex-1 truncate text-sm text-ink" title={item.key}>
+                        {item.file.name}
+                      </span>
+                      {item.status === 'uploading' ? (
+                        <span className="font-mono text-xs tabular-nums text-ink-3">{item.progress}%</span>
+                      ) : (
+                        <span className="font-mono text-xs text-ink-3">{formatBytes(item.file.size, 1)}</span>
+                      )}
+                      {inFlight && (
+                        <IconButton
+                          label={`Cancel ${item.file.name}`}
+                          className="-mr-1.5 size-6"
+                          onClick={() => onCancel(item.id)}
+                        >
+                          <X className="size-3.5" />
+                        </IconButton>
+                      )}
                     </div>
-                  )}
-                  {item.status === 'error' && <p className="mt-1 pl-6.5 text-xs text-danger">{item.errorMsg}</p>}
-                  {item.status === 'conflict' && (
-                    <div className="mt-1.5 pl-6.5">
-                      <p className="text-xs text-ink-3">{item.errorMsg}</p>
-                      <div className="mt-1.5 flex gap-2">
-                        <Button
-                          variant="secondary"
-                          className="h-7 px-2.5 text-xs"
-                          disabled={isUploading}
-                          onClick={() => onReplace(item)}
-                          aria-label={`Replace ${item.file.name}`}
-                        >
-                          Replace
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          className="h-7 px-2.5 text-xs"
-                          disabled={isUploading}
-                          onClick={() => onSkip(item.id)}
-                          aria-label={`Skip ${item.file.name}`}
-                        >
-                          Skip
-                        </Button>
+                    {item.status === 'uploading' && (
+                      <div
+                        role="progressbar"
+                        aria-label={`Uploading ${item.file.name}`}
+                        aria-valuenow={item.progress}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        className="mt-2 h-1 overflow-hidden rounded-full bg-sunken"
+                      >
+                        <motion.div
+                          className="h-full rounded-full bg-accent"
+                          animate={{ width: `${item.progress}%` }}
+                          transition={{ ease: 'easeOut', duration: 0.2 }}
+                        />
                       </div>
-                    </div>
-                  )}
-                </li>
-              ))}
+                    )}
+                    {(item.status === 'error' || item.status === 'cancelled') && (
+                      <div className="mt-1.5 pl-6.5">
+                        <p className={cn('text-xs', item.status === 'error' ? 'text-danger' : 'text-ink-3')}>
+                          {item.errorMsg}
+                        </p>
+                        <div className="mt-1.5 flex gap-2">
+                          <Button
+                            variant="secondary"
+                            className="h-7 px-2.5 text-xs"
+                            onClick={() => onRetry(item)}
+                            aria-label={`Retry ${item.file.name}`}
+                          >
+                            Retry
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="h-7 px-2.5 text-xs"
+                            onClick={() => onSkip(item.id)}
+                            aria-label={`Remove ${item.file.name}`}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    {item.status === 'conflict' && (
+                      <div className="mt-1.5 pl-6.5">
+                        <p className="text-xs text-ink-3">{item.errorMsg}</p>
+                        <div className="mt-1.5 flex gap-2">
+                          <Button
+                            variant="secondary"
+                            className="h-7 px-2.5 text-xs"
+                            disabled={isUploading}
+                            onClick={() => onReplace(item)}
+                            aria-label={`Replace ${item.file.name}`}
+                          >
+                            Replace
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="h-7 px-2.5 text-xs"
+                            disabled={isUploading}
+                            onClick={() => onSkip(item.id)}
+                            aria-label={`Skip ${item.file.name}`}
+                          >
+                            Skip
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </motion.section>

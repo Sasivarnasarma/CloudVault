@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str
     S3_ADDRESSING_STYLE: str = Field(default="path", description="path or virtual")
 
-    # A single presigned PUT is limited to 5 GiB by S3-compatible providers.
-    MAX_UPLOAD_BYTES: int = Field(default=5 * 1024**3, gt=0)
+    # Largest file accepted. Files over 5 GiB are uploaded in parts (S3's own maximum is 5 TiB).
+    MAX_UPLOAD_BYTES: int = Field(default=5 * 1024**4, gt=0)
 
     CORS_ORIGINS: List[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]

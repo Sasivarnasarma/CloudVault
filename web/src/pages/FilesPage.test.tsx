@@ -21,7 +21,12 @@ vi.mock('../services/folderService', () => ({
   copyFolder: vi.fn(),
   moveFolder: vi.fn(),
 }));
-vi.mock('../services/transferService', () => ({ uploadFileDirect: vi.fn(), triggerBrowserDownload: vi.fn() }));
+vi.mock('../services/transferService', async (importActual) => ({
+  ...(await importActual<typeof import('../services/transferService')>()),
+  uploadFileDirect: vi.fn(),
+  uploadPartDirect: vi.fn(),
+  triggerBrowserDownload: vi.fn(),
+}));
 
 import { copyFolder, createFolder, deleteFolder, moveFolder } from '../services/folderService';
 import { ApiError } from '../services/http';
@@ -263,7 +268,7 @@ describe('FilesPage', () => {
     await user.upload(input, file);
 
     await waitFor(() => expect(requestPresignedUpload).toHaveBeenCalledWith('hello.txt', 'text/plain', 5, false));
-    expect(uploadFileDirect).toHaveBeenCalledWith('https://storage.test/put', file, 'text/plain', expect.any(Function));
+    expect(uploadFileDirect).toHaveBeenCalledWith('https://storage.test/put', file, 'text/plain', expect.any(Function), expect.any(AbortSignal));
     expect(await screen.findByText('1 upload complete')).toBeInTheDocument();
     await waitFor(() => expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore));
   });
@@ -415,5 +420,54 @@ describe('FilesPage large folders', () => {
     expect(listMock).toHaveBeenLastCalledWith('', { limit: 500, cursor: 'c1' });
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
     expect(screen.getByText('2 folders, 4 files')).toBeInTheDocument();
+  });
+});
+
+describe('FilesPage upload control', () => {
+  const pickFile = async (user: ReturnType<typeof userEvent.setup>, name: string) => {
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    await user.upload(input, new File(['data'], name, { type: 'text/plain' }));
+  };
+
+  it('retries a failed upload', async () => {
+    vi.mocked(uploadFileDirect).mockRejectedValueOnce(new Error('Network error occurred during direct storage upload'));
+    const user = await renderPage();
+    await pickFile(user, 'flaky.txt');
+
+    expect(await screen.findByText('0 uploaded, 1 failed')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Retry flaky.txt' }));
+    expect(await screen.findByText('1 upload complete')).toBeInTheDocument();
+    expect(uploadFileDirect).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels an upload that is in progress', async () => {
+    vi.mocked(uploadFileDirect).mockImplementationOnce(
+      (_url, _file, _type, _progress, signal) =>
+        new Promise<void>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(new DOMException('Upload cancelled', 'AbortError')));
+        }),
+    );
+    const user = await renderPage();
+    await pickFile(user, 'slow.txt');
+
+    await user.click(await screen.findByRole('button', { name: 'Cancel slow.txt' }));
+    expect(await screen.findByText('Upload cancelled')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry slow.txt' })).toBeInTheDocument();
+  });
+
+  it('accepts more files while earlier uploads are still running', async () => {
+    let release!: () => void;
+    vi.mocked(uploadFileDirect).mockImplementationOnce(() => new Promise<void>((resolve) => (release = resolve)));
+    const user = await renderPage();
+    await pickFile(user, 'first.txt');
+    await screen.findByRole('button', { name: 'Cancel first.txt' });
+
+    await pickFile(user, 'second.txt');
+    expect(await screen.findByLabelText('Uploaded')).toBeInTheDocument(); // second finished while first still runs
+    expect(screen.getByText('first.txt')).toBeInTheDocument();
+    expect(screen.getByText('second.txt')).toBeInTheDocument();
+
+    release();
+    await waitFor(() => expect(screen.getByText('2 uploads complete')).toBeInTheDocument());
   });
 });

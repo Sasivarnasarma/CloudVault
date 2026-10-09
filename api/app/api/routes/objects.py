@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 
 from app.core.config import settings
+from app.core.limits import SINGLE_UPLOAD_MAX_BYTES
 from app.schemas.object import (
     DeleteObjectResponse,
     ObjectListResponse,
@@ -74,6 +75,8 @@ def generate_presigned_upload_url(
         raise PayloadTooLargeError(
             f"File exceeds the {settings.MAX_UPLOAD_BYTES // 1024**2} MiB upload limit"
         )
+    if payload.size is not None and payload.size > SINGLE_UPLOAD_MAX_BYTES:
+        raise PayloadTooLargeError("Files over 5 GiB must be uploaded in parts")
     return storage.generate_upload_url(
         key=clean_key,
         content_type=payload.content_type,

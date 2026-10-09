@@ -44,3 +44,8 @@ class StorageAccessError(StorageError):
 class StorageUnavailableError(StorageError):
     status_code = 503
     detail = "Storage service is unavailable"
+
+
+class UploadIncompleteError(StorageError):
+    status_code = 409
+    detail = "Some parts of the upload are missing"

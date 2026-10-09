@@ -72,3 +72,25 @@ export interface TransferObjectResponse {
 export interface TransferFolderResponse extends TransferObjectResponse {
   item_count: number;
 }
+
+export interface MultipartPlan {
+  key: string;
+  upload_id: string;
+  part_size: number;
+  part_count: number;
+}
+
+export interface PartUrlsResponse {
+  parts: { part_number: number; url: string }[];
+  expires_in: number;
+}
+
+export interface UploadedPartsResponse {
+  parts: { part_number: number; size: number; etag: string }[];
+}
+
+export interface MultipartCompleteResponse {
+  success: boolean;
+  key: string;
+  etag?: string | null;
+}

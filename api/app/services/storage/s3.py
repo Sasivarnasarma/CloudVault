@@ -10,11 +10,14 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import settings
+from app.core.limits import MAX_PARTS, choose_part_size
 from app.schemas.storage import (
     FolderItem,
+    MultipartUploadInfo,
     ObjectMetadata,
     PresignedDownloadData,
     PresignedUploadData,
+    UploadedPartInfo,
 )
 from app.services.storage.base import BaseStorageService
 from app.services.storage.exceptions import (
@@ -25,6 +28,7 @@ from app.services.storage.exceptions import (
     StorageAccessError,
     StorageError,
     StorageUnavailableError,
+    UploadIncompleteError,
 )
 from app.services.storage.keys import normalize_folder, normalize_key, normalize_prefix
 
@@ -74,6 +78,10 @@ def _storage_errors(action: str) -> Iterator[None]:
             raise StorageUnavailableError("The configured bucket does not exist") from e
         if code in _ACCESS_CODES:
             raise StorageAccessError() from e
+        if code == "NoSuchUpload":
+            raise ObjectNotFoundError("The upload was not found. It may have been completed or cancelled") from e
+        if code == "InvalidPart":
+            raise UploadIncompleteError("Some uploaded parts are missing or damaged") from e
         if code == "EntityTooLarge":
             raise PayloadTooLargeError("The object is too large to copy in one step") from e
         raise StorageError(f"Storage failed while {action}") from e
@@ -360,6 +368,87 @@ class S3StorageService(BaseStorageService):
             key=norm_key,
             expires_in=expires_in,
         )
+
+    # --- multipart uploads --------------------------------------------------------
+
+    def create_multipart_upload(
+        self, key: str, content_type: str, size: int, allow_overwrite: bool = False
+    ) -> MultipartUploadInfo:
+        norm_key = normalize_key(key)
+        part_size = choose_part_size(size)
+        part_count = -(-size // part_size)
+        with _storage_errors("starting multipart upload"):
+            if not allow_overwrite and self._exists(norm_key):
+                raise ObjectExistsError("A file with this name already exists")
+            response = self.client.create_multipart_upload(
+                Bucket=self.bucket, Key=norm_key, ContentType=content_type
+            )
+        return MultipartUploadInfo(upload_id=response["UploadId"], part_size=part_size, part_count=part_count)
+
+    def presign_upload_parts(
+        self, key: str, upload_id: str, part_numbers: List[int], expires_in: int = 3600
+    ) -> List[Tuple[int, str]]:
+        norm_key = normalize_key(key)
+        if any(n < 1 or n > MAX_PARTS for n in part_numbers):
+            raise InvalidKeyError(f"Part numbers must be between 1 and {MAX_PARTS}")
+        with _storage_errors("generating part upload URLs"):
+            return [
+                (
+                    number,
+                    self.client.generate_presigned_url(
+                        ClientMethod="upload_part",
+                        Params={
+                            "Bucket": self.bucket,
+                            "Key": norm_key,
+                            "UploadId": upload_id,
+                            "PartNumber": number,
+                        },
+                        ExpiresIn=expires_in,
+                    ),
+                )
+                for number in part_numbers
+            ]
+
+    def _list_parts(self, key: str, upload_id: str) -> List[UploadedPartInfo]:
+        parts: List[UploadedPartInfo] = []
+        paginator = self.client.get_paginator("list_parts")
+        for page in paginator.paginate(Bucket=self.bucket, Key=key, UploadId=upload_id):
+            parts.extend(
+                UploadedPartInfo(part_number=p["PartNumber"], size=p["Size"], etag=p["ETag"])
+                for p in page.get("Parts", [])
+            )
+        return sorted(parts, key=lambda p: p.part_number)
+
+    def list_uploaded_parts(self, key: str, upload_id: str) -> List[UploadedPartInfo]:
+        norm_key = normalize_key(key)
+        with _storage_errors("listing uploaded parts"):
+            return self._list_parts(norm_key, upload_id)
+
+    def complete_multipart_upload(self, key: str, upload_id: str, part_count: int) -> Optional[str]:
+        norm_key = normalize_key(key)
+        with _storage_errors("completing multipart upload"):
+            # ETags come from storage, so the browser never has to read them (no CORS ExposeHeaders needed).
+            parts = self._list_parts(norm_key, upload_id)
+            present = {p.part_number for p in parts}
+            missing = [n for n in range(1, part_count + 1) if n not in present]
+            if missing or len(parts) != part_count:
+                shown = ", ".join(str(n) for n in missing[:10])
+                raise UploadIncompleteError(
+                    f"{len(missing)} part(s) are missing" + (f" (e.g. {shown})" if missing else "")
+                )
+            response = self.client.complete_multipart_upload(
+                Bucket=self.bucket,
+                Key=norm_key,
+                UploadId=upload_id,
+                MultipartUpload={"Parts": [{"ETag": p.etag, "PartNumber": p.part_number} for p in parts]},
+            )
+        etag = response.get("ETag")
+        return etag.strip('"') if etag else None
+
+    def abort_multipart_upload(self, key: str, upload_id: str) -> None:
+        norm_key = normalize_key(key)
+        with _storage_errors("aborting multipart upload"):
+            self.client.abort_multipart_upload(Bucket=self.bucket, Key=norm_key, UploadId=upload_id)
 
     def generate_download_url(
         self, key: str, expires_in: int = 3600, filename: Optional[str] = None

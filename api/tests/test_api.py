@@ -7,9 +7,11 @@ from app.core.config import settings
 from app.main import app
 from app.schemas.storage import (
     FolderItem,
+    MultipartUploadInfo,
     ObjectMetadata,
     PresignedDownloadData,
     PresignedUploadData,
+    UploadedPartInfo,
 )
 from app.services.storage.base import BaseStorageService
 from app.services.storage.exceptions import (
@@ -18,6 +20,7 @@ from app.services.storage.exceptions import (
     StorageAccessError,
     StorageError,
     StorageUnavailableError,
+    UploadIncompleteError,
 )
 from app.services.storage.factory import get_storage_service
 from app.services.storage.keys import normalize_folder, normalize_key
@@ -104,6 +107,31 @@ class FakeStorage(BaseStorageService):
     def move_folder(self, source_prefix, destination_prefix):
         self.calls.append(("move_folder", f"{source_prefix}->{destination_prefix}"))
         return self.copy_folder(source_prefix, destination_prefix)
+
+    def create_multipart_upload(self, key, content_type, size, allow_overwrite=False):
+        self.calls.append(("mp_create", f"{key}|{content_type}|{size}|{allow_overwrite}"))
+        if key in self.existing and not allow_overwrite:
+            raise ObjectExistsError("A file with this name already exists")
+        return MultipartUploadInfo(upload_id="up-1", part_size=32 * 1024**2, part_count=3)
+
+    def presign_upload_parts(self, key, upload_id, part_numbers, expires_in=3600):
+        self.calls.append(("mp_presign", f"{key}|{upload_id}|{part_numbers}"))
+        return [(n, f"https://example.test/part/{n}") for n in part_numbers]
+
+    def list_uploaded_parts(self, key, upload_id):
+        self.calls.append(("mp_list", f"{key}|{upload_id}"))
+        if upload_id == "gone":
+            raise ObjectNotFoundError("The upload was not found")
+        return [UploadedPartInfo(part_number=1, size=32 * 1024**2, etag="e1")]
+
+    def complete_multipart_upload(self, key, upload_id, part_count):
+        self.calls.append(("mp_complete", f"{key}|{upload_id}|{part_count}"))
+        if part_count != 3:
+            raise UploadIncompleteError("1 part(s) are missing (e.g. 3)")
+        return "etag-final"
+
+    def abort_multipart_upload(self, key, upload_id):
+        self.calls.append(("mp_abort", f"{key}|{upload_id}"))
 
     def generate_upload_url(self, key, content_type, expires_in=900, allow_overwrite=False):
         self.calls.append(("presign_upload", f"{key}:{allow_overwrite}"))
@@ -360,3 +388,93 @@ def test_cursor_alone_uses_the_default_page_size(client, storage):
 @pytest.mark.parametrize("limit", ["0", "1001", "-5", "abc"])
 def test_list_rejects_invalid_limits(client, limit):
     assert client.get("/api/objects", params={"limit": limit}).status_code == 422
+
+
+def test_single_upload_over_5_gib_must_use_multipart(client):
+    res = client.post("/api/objects/presign-upload", json={"key": "big.bin", "size": 5 * 1024**3 + 1})
+    assert res.status_code == 413
+    assert "parts" in res.json()["detail"]
+    ok = client.post("/api/objects/presign-upload", json={"key": "big.bin", "size": 5 * 1024**3})
+    assert ok.status_code == 200
+
+
+class TestMultipartRoutes:
+    def test_create_returns_server_chosen_part_plan(self, client, storage):
+        res = client.post(
+            "/api/uploads/multipart",
+            json={"key": "/big//file.bin", "size": 70 * 1024**2, "content_type": "application/zip"},
+        )
+        assert res.status_code == 200
+        assert res.json() == {
+            "key": "big/file.bin",
+            "upload_id": "up-1",
+            "part_size": 32 * 1024**2,
+            "part_count": 3,
+        }
+        assert ("mp_create", "big/file.bin|application/zip|73400320|False") in storage.calls
+
+    def test_create_refuses_existing_unless_overwrite(self, client, storage):
+        assert client.post("/api/uploads/multipart", json={"key": "exists.txt", "size": 10}).status_code == 409
+        forced = client.post("/api/uploads/multipart", json={"key": "exists.txt", "size": 10, "overwrite": True})
+        assert forced.status_code == 200
+        assert ("mp_create", "exists.txt|application/octet-stream|10|True") in storage.calls
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"key": "x.bin", "size": 0},
+            {"key": "x.bin", "size": -1},
+            {"key": "x.bin", "size": 10, "content_type": "bad\r\ntype"},
+            {"key": "../x", "size": 10},
+            {"key": "/", "size": 10},
+        ],
+    )
+    def test_create_validates_input(self, client, body):
+        assert client.post("/api/uploads/multipart", json=body).status_code in (400, 422)
+
+    def test_create_enforces_the_overall_size_limit(self, client):
+        res = client.post("/api/uploads/multipart", json={"key": "x.bin", "size": settings.MAX_UPLOAD_BYTES + 1})
+        assert res.status_code == 413
+
+    def test_part_urls_are_deduplicated_and_sorted(self, client, storage):
+        res = client.post(
+            "/api/uploads/multipart/parts",
+            json={"key": "big.bin", "upload_id": "up-1", "part_numbers": [3, 1, 3, 2]},
+        )
+        assert res.status_code == 200
+        assert [p["part_number"] for p in res.json()["parts"]] == [1, 2, 3]
+        assert ("mp_presign", "big.bin|up-1|[1, 2, 3]") in storage.calls
+
+    @pytest.mark.parametrize("numbers", [[], list(range(1, 102))])
+    def test_part_url_requests_are_bounded(self, client, numbers):
+        res = client.post(
+            "/api/uploads/multipart/parts", json={"key": "big.bin", "upload_id": "up-1", "part_numbers": numbers}
+        )
+        assert res.status_code == 422
+
+    def test_uploaded_parts_can_be_listed_to_resume(self, client):
+        res = client.get("/api/uploads/multipart/parts", params={"key": "big.bin", "upload_id": "up-1"})
+        assert res.status_code == 200
+        assert res.json()["parts"] == [{"part_number": 1, "size": 32 * 1024**2, "etag": "e1"}]
+        missing = client.get("/api/uploads/multipart/parts", params={"key": "big.bin", "upload_id": "gone"})
+        assert missing.status_code == 404
+
+    def test_complete_and_incomplete(self, client):
+        ok = client.post("/api/uploads/multipart/complete", json={"key": "big.bin", "upload_id": "up-1", "part_count": 3})
+        assert ok.status_code == 200
+        assert ok.json() == {"success": True, "key": "big.bin", "etag": "etag-final"}
+        short = client.post("/api/uploads/multipart/complete", json={"key": "big.bin", "upload_id": "up-1", "part_count": 2})
+        assert short.status_code == 409
+        assert "missing" in short.json()["detail"]
+        assert client.post(
+            "/api/uploads/multipart/complete", json={"key": "big.bin", "upload_id": "up-1", "part_count": 0}
+        ).status_code == 422
+
+    def test_abort(self, client, storage):
+        res = client.post("/api/uploads/multipart/abort", json={"key": "/big.bin", "upload_id": "up-1"})
+        assert res.status_code == 200 and res.json() == {"success": True}
+        assert ("mp_abort", "big.bin|up-1") in storage.calls
+
+    def test_upload_ids_are_required(self, client):
+        assert client.post("/api/uploads/multipart/abort", json={"key": "big.bin", "upload_id": ""}).status_code == 422
+        assert client.post("/api/uploads/multipart/abort", json={"key": "big.bin"}).status_code == 422
