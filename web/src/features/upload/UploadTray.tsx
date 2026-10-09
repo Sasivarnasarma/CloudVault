@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { IconButton } from '../../components/common/Button';
 import { cn } from '../../lib/cn';
 import { formatBytes } from '../../lib/formatters';
-import type { UploadItem } from '../../hooks/useUpload';
+import type { UploadItem } from './useUpload';
 
 interface UploadTrayProps {
   queue: UploadItem[];

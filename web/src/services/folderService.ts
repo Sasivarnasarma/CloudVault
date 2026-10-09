@@ -1,21 +1,10 @@
-import type { FolderObject } from '../types';
+import type { CreateFolderResponse, DeleteFolderResponse } from '../types';
+import { jsonBody, request } from './http';
 
-export interface CreateFolderResponse {
-  success: boolean;
-  folder: FolderObject;
+export function createFolder(path: string): Promise<CreateFolderResponse> {
+  return request('/api/folders', jsonBody({ path }), 'Failed to create folder');
 }
 
-export async function createFolder(path: string): Promise<CreateFolderResponse> {
-  const response = await fetch('/api/folders', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Failed to create folder' }));
-    throw new Error(errorData.detail || `HTTP error ${response.status}`);
-  }
-
-  return response.json();
+export function deleteFolder(prefix: string): Promise<DeleteFolderResponse> {
+  return request(`/api/folders?prefix=${encodeURIComponent(prefix)}`, { method: 'DELETE' }, 'Failed to delete folder');
 }

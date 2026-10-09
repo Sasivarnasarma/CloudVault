@@ -42,3 +42,20 @@ export interface PresignDownloadResponse {
   key: string;
   expires_in: number;
 }
+
+export interface DeleteObjectResponse {
+  success: boolean;
+  key: string;
+  message: string;
+}
+
+export interface CreateFolderResponse {
+  success: boolean;
+  folder: FolderObject;
+}
+
+export interface DeleteFolderResponse {
+  success: boolean;
+  prefix: string;
+  deleted_count: number;
+}

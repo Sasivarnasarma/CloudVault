@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { requestPresignedUpload, uploadFileDirect } from '../services/uploadService';
+import { requestPresignedUpload } from '../../services/objectService';
+import { uploadFileDirect } from '../../services/transferService';
+import { errorMessage } from '../../lib/cn';
 
 export interface UploadItem {
   id: string;
@@ -63,11 +65,11 @@ export function useUpload() {
             q.id === item.id ? { ...q, progress: 100, status: 'completed' } : q
           )
         );
-      } catch (err: any) {
+      } catch (err) {
         setQueue((prev) =>
           prev.map((q) =>
             q.id === item.id
-              ? { ...q, status: 'error', errorMsg: err.message || 'Upload failed' }
+              ? { ...q, status: 'error', errorMsg: errorMessage(err, 'Upload failed') }
               : q
           )
         );

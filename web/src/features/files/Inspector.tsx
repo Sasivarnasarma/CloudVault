@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Button, IconButton } from '../../components/common/Button';
 import { categoryOf } from '../../lib/fileKind';
 import { formatBytes, formatDate } from '../../lib/formatters';
-import { requestPresignedDownload } from '../../services/uploadService';
+import { requestPresignedDownload } from '../../services/objectService';
 import type { FileObject } from '../../types';
 import { FileIcon } from './FileIcon';
 
