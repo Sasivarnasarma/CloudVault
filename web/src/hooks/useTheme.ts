@@ -4,8 +4,12 @@ export type ThemeMode = 'light' | 'dark';
 
 export function useTheme() {
   const [theme, setTheme] = useState<ThemeMode>(() => {
-    const saved = localStorage.getItem('cloudvault_theme') as ThemeMode;
-    if (saved === 'light' || saved === 'dark') return saved;
+    try {
+      const saved = localStorage.getItem('cloudvault_theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    } catch {
+      /* storage unavailable: fall back to the system preference */
+    }
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
 
@@ -16,7 +20,11 @@ export function useTheme() {
     } else {
       root.classList.remove('dark');
     }
-    localStorage.setItem('cloudvault_theme', theme);
+    try {
+      localStorage.setItem('cloudvault_theme', theme);
+    } catch {
+      /* storage unavailable: preference just won't persist */
+    }
   }, [theme]);
 
   const toggleTheme = () => {

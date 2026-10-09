@@ -31,7 +31,6 @@ export function triggerBrowserDownload(downloadUrl: string): void {
   const link = document.createElement('a');
   link.href = downloadUrl;
   link.rel = 'noopener noreferrer';
-  link.target = '_blank';
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

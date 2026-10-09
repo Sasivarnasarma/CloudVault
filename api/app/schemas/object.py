@@ -1,7 +1,15 @@
-from datetime import datetime
-from typing import Dict, List, Optional
+from typing import List, Optional
+
 from pydantic import BaseModel, Field
-from app.schemas.storage import FolderItem, ObjectMetadata
+
+from app.schemas.storage import (
+    FolderItem,
+    ObjectMetadata,
+    PresignedDownloadData,
+    PresignedUploadData,
+)
+
+CONTENT_TYPE_PATTERN = r"^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+(\s*;[^\r\n]*)?$"
 
 
 class ObjectListResponse(BaseModel):
@@ -16,23 +24,16 @@ class PresignUploadRequest(BaseModel):
     key: str = Field(description="Target object key path, e.g. documents/report.pdf")
     content_type: str = Field(
         default="application/octet-stream",
+        pattern=CONTENT_TYPE_PATTERN,
+        max_length=255,
         description="MIME content type of the file",
     )
-    size: Optional[int] = Field(default=None, description="Optional size in bytes")
+    size: Optional[int] = Field(default=None, ge=0, description="File size in bytes")
 
 
-class PresignUploadResponse(BaseModel):
-    upload_url: str
-    method: str = "PUT"
-    headers: Dict[str, str]
-    key: str
-    expires_in: int
-
-
-class PresignDownloadResponse(BaseModel):
-    download_url: str
-    key: str
-    expires_in: int
+# Responses share the storage-layer shapes.
+PresignUploadResponse = PresignedUploadData
+PresignDownloadResponse = PresignedDownloadData
 
 
 class DeleteObjectResponse(BaseModel):

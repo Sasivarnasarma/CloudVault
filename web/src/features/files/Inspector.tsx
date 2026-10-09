@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Button, IconButton } from '../../components/common/Button';
 import { categoryOf } from '../../lib/fileKind';
 import { formatBytes, formatDate } from '../../lib/formatters';
-import { requestPresignedDownload } from '../../services/objectService';
+import { getObjectMetadata, requestPresignedDownload } from '../../services/objectService';
 import type { FileObject } from '../../types';
 import { FileIcon } from './FileIcon';
 
@@ -54,7 +54,20 @@ function Field({ label, children, mono }: { label: string; children: React.React
 
 export function Inspector({ file, bucket, onClose, onDownload, onDelete }: InspectorProps) {
   const [copied, setCopied] = useState(false);
+  // The listing guesses content types from file names; the real value comes from storage.
+  const [actualType, setActualType] = useState<{ key: string; type: string } | null>(null);
+  const contentType = actualType?.key === file.key ? actualType.type : file.content_type;
   const isImage = categoryOf(file) === 'images';
+
+  useEffect(() => {
+    let cancelled = false;
+    getObjectMetadata(file.key)
+      .then((meta) => !cancelled && setActualType({ key: file.key, type: meta.content_type }))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [file.key]);
 
   const copy = async (text: string) => {
     try {
@@ -86,7 +99,7 @@ export function Inspector({ file, bucket, onClose, onDownload, onDelete }: Inspe
 
         <p className="break-all text-base font-semibold leading-snug text-ink">{file.name}</p>
         <p className="mt-1 text-sm text-ink-3">
-          {formatBytes(file.size)} · {file.content_type}
+          {formatBytes(file.size)} · {contentType}
         </p>
 
         <div className="mt-5 flex gap-2">

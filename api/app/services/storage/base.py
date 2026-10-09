@@ -23,7 +23,10 @@ class BaseStorageService(ABC):
 
     @abstractmethod
     def create_folder(self, folder_path: str) -> FolderItem:
-        """Create a new virtual folder marker object."""
+        """Create a new virtual folder marker object.
+
+        Raises ObjectExistsError if the folder already exists.
+        """
         pass
 
     @abstractmethod
@@ -33,14 +36,24 @@ class BaseStorageService(ABC):
 
     @abstractmethod
     def delete_folder(self, prefix: str) -> int:
-        """Recursively delete all objects starting with a folder prefix."""
+        """Recursively delete all objects under a folder prefix.
+
+        Refuses to run on an empty prefix (the bucket root).
+        """
         pass
 
     @abstractmethod
     def generate_upload_url(
-        self, key: str, content_type: str, expires_in: int = 900
+        self,
+        key: str,
+        content_type: str,
+        expires_in: int = 900,
+        allow_overwrite: bool = False,
     ) -> PresignedUploadData:
-        """Generate a presigned PUT URL for direct client upload."""
+        """Generate a presigned PUT URL for direct client upload.
+
+        Raises ObjectExistsError if the key exists and `allow_overwrite` is False.
+        """
         pass
 
     @abstractmethod

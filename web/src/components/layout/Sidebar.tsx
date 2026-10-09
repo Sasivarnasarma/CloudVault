@@ -99,7 +99,7 @@ export function Sidebar(props: SidebarProps) {
         </div>
 
         <nav aria-label="File categories" className="flex-1">
-          <p className="mb-2 px-2 text-xs font-medium uppercase tracking-wider text-ink-3">Browse</p>
+          <p className="mb-2 px-2 text-xs font-medium uppercase tracking-wider text-ink-3">In this folder</p>
           <ul className="space-y-0.5">
             {FILTERS.map(({ id, label, icon: Icon }) => {
               const active = filter === id;

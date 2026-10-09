@@ -8,7 +8,7 @@ router = APIRouter(tags=["Health"])
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check(
+def health_check(
     storage: BaseStorageService = Depends(get_storage_service),
 ):
     storage_ok = storage.check_connection()

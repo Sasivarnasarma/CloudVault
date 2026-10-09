@@ -41,7 +41,7 @@ function hasFiles(e: DragEvent): boolean {
 
 export function FilesPage() {
   const { theme, toggleTheme } = useTheme();
-  const { currentPrefix, data, loading, error, navigateToFolder, navigateUp, refetch } = useObjects('');
+  const { currentPrefix, data, loading, error, navigateToFolder, navigateUp, refetch } = useObjects();
   const { queue, isUploading, startUploads, clearQueue } = useUpload();
 
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -106,8 +106,7 @@ export function FilesPage() {
     const q = search.trim().toLowerCase();
     const visible = allEntries.filter((e) => {
       if (q && !e.name.toLowerCase().includes(q)) return false;
-      if (filter === 'all') return true;
-      return e.type === 'file' && matchesFilter(e.file, filter);
+      return e.type === 'folder' || matchesFilter(e.file, filter);
     });
     return sortEntries(visible, sort.key, sort.dir);
   }, [allEntries, search, filter, sort]);
@@ -197,7 +196,20 @@ export function FilesPage() {
       e.preventDefault();
       dragDepth.current = 0;
       setDragging(false);
-      handleUploadFiles(Array.from(e.dataTransfer?.files ?? []));
+      const items = Array.from(e.dataTransfer?.items ?? []);
+      const files: File[] = [];
+      let skippedFolder = false;
+      for (const item of items) {
+        if (item.kind !== 'file') continue;
+        if (item.webkitGetAsEntry?.()?.isDirectory) {
+          skippedFolder = true;
+          continue;
+        }
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+      if (skippedFolder) toast.info('Folders can’t be uploaded yet. Only files were added.');
+      handleUploadFiles(files);
     };
     window.addEventListener('dragenter', onEnter);
     window.addEventListener('dragleave', onLeave);
@@ -285,7 +297,7 @@ export function FilesPage() {
       <div className="flex min-w-0 flex-1 flex-col">
         <Toolbar
           currentPrefix={currentPrefix}
-          rootLabel={health?.bucket ?? 'Home'}
+          rootLabel="All files"
           search={search}
           searchRef={searchRef}
           view={view}

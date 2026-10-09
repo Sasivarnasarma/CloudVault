@@ -43,6 +43,14 @@ pnpm dev
 
 The app serves on `http://localhost:5173` and proxies `/api` to the backend.
 
+## Deployment notes
+
+The frontend calls the API under `/api` on its own origin. In production, serve
+`web/dist` and the API behind one reverse proxy, or set `VITE_API_BASE_URL`
+(see `web/.env.example`) at build time and add the frontend origin to
+`CORS_ORIGINS`. The API has no authentication yet, so keep it off the public
+internet.
+
 ## Storage configuration
 
 Configured in `api/.env` (see `api/.env.example`):
@@ -53,9 +61,10 @@ Configured in `api/.env` (see `api/.env.example`):
 | `S3_ENDPOINT`         | Endpoint URL (omit for AWS S3)               |
 | `S3_REGION`           | Region (`auto` for R2)                       |
 | `S3_BUCKET`           | Bucket name                                  |
-| `S3_ACCESS_KEY`       | Access key                                   |
-| `S3_SECRET_KEY`       | Secret key                                   |
+| `S3_ACCESS_KEY`       | Access key (required)                        |
+| `S3_SECRET_KEY`       | Secret key (required)                        |
 | `S3_ADDRESSING_STYLE` | `path` or `virtual`                          |
+| `MAX_UPLOAD_BYTES`    | Optional upload size limit (default 5 GiB)   |
 | `CORS_ORIGINS`        | JSON list of allowed frontend origins        |
 
 Direct browser uploads also require a CORS rule on the **bucket** that allows
