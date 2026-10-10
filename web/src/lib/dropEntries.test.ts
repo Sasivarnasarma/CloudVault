@@ -40,14 +40,23 @@ describe('readDroppedItems', () => {
   });
 
   it('reports folders with no files so they are not lost', async () => {
-    const tree = dirEntry('Project', [fileEntry('readme.md'), dirEntry('empty', []), dirEntry('nested', [dirEntry('deeper', [])])]);
+    const tree = dirEntry('Project', [
+      fileEntry('readme.md'),
+      dirEntry('empty', []),
+      dirEntry('nested', [dirEntry('deeper', [])]),
+    ]);
     const result = await readDroppedItems(dropItems(tree));
     expect(result.sources.map((s) => s.path)).toEqual(['Project/readme.md']);
     expect(result.emptyFolders.sort()).toEqual(['Project/empty', 'Project/nested/deeper']);
   });
 
   it('leaves out operating system junk files and counts them', async () => {
-    const tree = dirEntry('Stuff', [fileEntry('real.txt'), fileEntry('.DS_Store'), fileEntry('Thumbs.db'), fileEntry('desktop.ini')]);
+    const tree = dirEntry('Stuff', [
+      fileEntry('real.txt'),
+      fileEntry('.DS_Store'),
+      fileEntry('Thumbs.db'),
+      fileEntry('desktop.ini'),
+    ]);
     const result = await readDroppedItems(dropItems(tree));
     expect(result.sources.map((s) => s.path)).toEqual(['Stuff/real.txt']);
     expect(result.skipped).toBe(3);
@@ -61,7 +70,9 @@ describe('readDroppedItems', () => {
 
   it('copes with a missing or empty item list and non-file items', async () => {
     expect(await readDroppedItems(null)).toEqual({ sources: [], emptyFolders: [], skipped: 0 });
-    const text = [{ kind: 'string', webkitGetAsEntry: () => null, getAsFile: () => null }] as unknown as DataTransferItemList;
+    const text = [
+      { kind: 'string', webkitGetAsEntry: () => null, getAsFile: () => null },
+    ] as unknown as DataTransferItemList;
     expect((await readDroppedItems(text)).sources).toEqual([]);
   });
 

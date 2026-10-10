@@ -1,11 +1,4 @@
-import {
-  Archive,
-  FileCode2,
-  FileText,
-  File as FileGeneric,
-  Image as ImageIcon,
-  Music2,
-} from 'lucide-react';
+import { Archive, FileCode2, FileText, File as FileGeneric, Image as ImageIcon, Music2 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { cn } from '../../lib/cn';
 import { categoryOf, type FileCategory } from '../../lib/fileKind';

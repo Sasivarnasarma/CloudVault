@@ -46,7 +46,15 @@ export function EntryContextMenu({ items, children }: { items: MenuItem[]; child
   );
 }
 
-export function EntryMoreMenu({ items, label, tabbable = true }: { items: MenuItem[]; label: string; tabbable?: boolean }) {
+export function EntryMoreMenu({
+  items,
+  label,
+  tabbable = true,
+}: {
+  items: MenuItem[];
+  label: string;
+  tabbable?: boolean;
+}) {
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>

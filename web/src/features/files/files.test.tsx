@@ -90,9 +90,11 @@ describe('FileBrowser (grid)', () => {
   });
 
   it('opens a folder with one tap on a touch screen, which has no double click', async () => {
-    const match = vi.spyOn(window, 'matchMedia').mockImplementation(
-      (query: string) => ({ matches: query === '(pointer: coarse)', media: query }) as MediaQueryList,
-    );
+    const match = vi
+      .spyOn(window, 'matchMedia')
+      .mockImplementation(
+        (query: string) => ({ matches: query === '(pointer: coarse)', media: query }) as MediaQueryList,
+      );
     const { onOpenFolder, onChoose } = renderBrowser();
     await userEvent.click(screen.getByText('Reports'));
     expect(onOpenFolder).toHaveBeenCalledWith('Reports/');
@@ -132,7 +134,11 @@ describe('FileBrowser (grid)', () => {
 describe('FileBrowser organize actions', () => {
   it('offers rename, move and copy for files', async () => {
     const { onTransfer } = renderBrowser();
-    for (const [label, mode] of [['Rename', 'rename'], ['Move to…', 'move'], ['Copy to…', 'copy']] as const) {
+    for (const [label, mode] of [
+      ['Rename', 'rename'],
+      ['Move to…', 'move'],
+      ['Copy to…', 'copy'],
+    ] as const) {
       await userEvent.click(screen.getByRole('button', { name: 'More actions for report.pdf' }));
       await userEvent.click(await screen.findByRole('menuitem', { name: label }));
       expect(onTransfer).toHaveBeenLastCalledWith(entries[1], mode);
@@ -252,7 +258,9 @@ describe('Inspector', () => {
 
   it('previews images through a presigned URL but not other files', async () => {
     const image = makeFile('photo.png', { content_type: 'image/png' });
-    const { unmount } = render(<Inspector file={image} onClose={() => {}} onDownload={() => {}} onDelete={() => {}} onTransfer={() => {}} />);
+    const { unmount } = render(
+      <Inspector file={image} onClose={() => {}} onDownload={() => {}} onDelete={() => {}} onTransfer={() => {}} />,
+    );
     const preview = await screen.findByRole('img', { name: 'photo.png' });
     expect(preview).toHaveAttribute('src', 'https://storage.test/img.png');
     expect(downloadMock).toHaveBeenCalledWith('photo.png');
@@ -265,7 +273,6 @@ describe('Inspector', () => {
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 });
-
 
 const entryFile = (name: string): Entry => {
   const file = makeFile(name);
@@ -290,7 +297,9 @@ describe('DeleteDialog', () => {
 
   it('names a single file', () => {
     setup([entryFile('a.txt')]);
-    expect(screen.getByRole('dialog', { name: 'Delete file?' })).toHaveTextContent('“a.txt” will be permanently deleted');
+    expect(screen.getByRole('dialog', { name: 'Delete file?' })).toHaveTextContent(
+      '“a.txt” will be permanently deleted',
+    );
   });
 
   it('warns that a folder takes everything inside it', () => {
@@ -301,7 +310,9 @@ describe('DeleteDialog', () => {
   it('counts several items and mentions folders', () => {
     setup([entryFile('a.txt'), entryFile('b.txt'), entryFolder('Docs')]);
     const dialog = screen.getByRole('dialog', { name: 'Delete 3 items?' });
-    expect(dialog).toHaveTextContent('2 files and 1 folder will be permanently deleted, including everything inside the folders');
+    expect(dialog).toHaveTextContent(
+      '2 files and 1 folder will be permanently deleted, including everything inside the folders',
+    );
   });
 
   it('confirms and cancels', async () => {
@@ -355,7 +366,15 @@ describe('ListingState', () => {
 
   it('shows a placeholder while loading, and an empty message when nothing is left', async () => {
     const { unmount } = render(
-      <ListingState error={null} loading empty={false} filtered={false} view="list" onRetry={() => {}} onClearFilters={() => {}}>
+      <ListingState
+        error={null}
+        loading
+        empty={false}
+        filtered={false}
+        view="list"
+        onRetry={() => {}}
+        onClearFilters={() => {}}
+      >
         <p>the listing</p>
       </ListingState>,
     );

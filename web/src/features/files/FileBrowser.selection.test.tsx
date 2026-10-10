@@ -32,7 +32,15 @@ function renderBrowser(view: ViewMode, selected: string[] = []) {
     onTransfer: vi.fn(),
     onSortChange: vi.fn(),
   };
-  render(<FileBrowser entries={entries} view={view} selection={new Set(selected)} sort={{ key: 'name', dir: 'asc' }} {...h} />);
+  render(
+    <FileBrowser
+      entries={entries}
+      view={view}
+      selection={new Set(selected)}
+      sort={{ key: 'name', dir: 'asc' }}
+      {...h}
+    />,
+  );
   return h;
 }
 

@@ -18,7 +18,13 @@ import {
   listUploadedParts,
   presignUploadParts,
 } from './multipartService';
-import { isAbortError, TransferError, triggerBrowserDownload, uploadFileDirect, uploadPartDirect } from './transferService';
+import {
+  isAbortError,
+  TransferError,
+  triggerBrowserDownload,
+  uploadFileDirect,
+  uploadPartDirect,
+} from './transferService';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -99,7 +105,12 @@ describe('objectService', () => {
     const { url, init } = lastCall();
     expect(url).toBe('/api/objects/presign-upload');
     expect(init?.method).toBe('POST');
-    expect(JSON.parse(String(init?.body))).toEqual({ key: 'dir/a.txt', content_type: 'text/plain', size: 12, overwrite: false });
+    expect(JSON.parse(String(init?.body))).toEqual({
+      key: 'dir/a.txt',
+      content_type: 'text/plain',
+      size: 12,
+      overwrite: false,
+    });
 
     await requestPresignedUpload('dir/a.txt', 'text/plain', 12, true);
     expect(JSON.parse(String(lastCall().init?.body)).overwrite).toBe(true);
@@ -123,7 +134,11 @@ describe('copy and move services', () => {
     await fn('a/old.txt', 'b/new.txt');
     expect(lastCall().url).toBe(`/api/objects/${action}`);
     expect(lastCall().init?.method).toBe('POST');
-    expect(JSON.parse(String(lastCall().init?.body))).toEqual({ source: 'a/old.txt', destination: 'b/new.txt', overwrite: false });
+    expect(JSON.parse(String(lastCall().init?.body))).toEqual({
+      source: 'a/old.txt',
+      destination: 'b/new.txt',
+      overwrite: false,
+    });
 
     await fn('a/old.txt', 'b/new.txt', true);
     expect(JSON.parse(String(lastCall().init?.body)).overwrite).toBe(true);
@@ -281,7 +296,15 @@ describe('transferService', () => {
     it('does not send anything if it is already cancelled', async () => {
       const controller = new AbortController();
       controller.abort();
-      await expect(uploadFileDirect('https://storage.test/put', new File(['x'], 'a.txt'), 'text/plain', undefined, controller.signal)).rejects.toMatchObject({
+      await expect(
+        uploadFileDirect(
+          'https://storage.test/put',
+          new File(['x'], 'a.txt'),
+          'text/plain',
+          undefined,
+          controller.signal,
+        ),
+      ).rejects.toMatchObject({
         name: 'AbortError',
       });
     });

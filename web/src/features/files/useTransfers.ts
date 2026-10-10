@@ -27,7 +27,9 @@ export function useTransfers({ selection, onRefresh }: Options) {
   const onTransferDone = ({ mode, entry, destination }: { mode: TransferMode; entry: Entry; destination: string }) => {
     const verb = { rename: 'Renamed', move: 'Moved', copy: 'Copied' }[mode];
     const target = destination.replace(/\/+$/, '');
-    toast.success(mode === 'rename' ? `${verb} to “${target.split('/').pop()}”` : `${verb} “${entry.name}” to ${target}`);
+    toast.success(
+      mode === 'rename' ? `${verb} to “${target.split('/').pop()}”` : `${verb} “${entry.name}” to ${target}`,
+    );
     if (mode !== 'copy') selection.remove([entry.id]);
     onRefresh();
   };
@@ -43,7 +45,8 @@ export function useTransfers({ selection, onRefresh }: Options) {
       return current;
     };
 
-    if (succeeded.length > 0) toast.success(`${verb} ${describeEntries(succeeded.map((r) => r.entry))}`, { id: takeId() });
+    if (succeeded.length > 0)
+      toast.success(`${verb} ${describeEntries(succeeded.map((r) => r.entry))}`, { id: takeId() });
     if (failed.length > 0) {
       const what =
         results.length === 1

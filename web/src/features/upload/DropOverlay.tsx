@@ -7,7 +7,7 @@ export function DropOverlay({ visible, destination }: { visible: boolean; destin
     <AnimatePresence>
       {visible && (
         <motion.div
-          className="pointer-events-none fixed inset-0 z-[60] flex items-center justify-center bg-accent/10 p-6 backdrop-blur-[2px]"
+          className="pointer-events-none fixed inset-0 z-60 flex items-center justify-center bg-accent/10 p-6 backdrop-blur-[2px]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

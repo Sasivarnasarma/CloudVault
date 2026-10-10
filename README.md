@@ -50,6 +50,20 @@ cd api && uv run pytest     # backend
 cd web && pnpm test         # frontend (Vitest + Testing Library)
 ```
 
+### Code style
+
+Both projects are formatted and linted by tools that run the same way for everyone:
+[Ruff](https://docs.astral.sh/ruff/) for Python and [Prettier](https://prettier.io) with
+[oxlint](https://oxc.rs/docs/guide/usage/linter) for TypeScript.
+
+```bash
+cd api && uv run ruff format . && uv run ruff check .    # format, then lint
+cd web && pnpm format && pnpm lint && pnpm typecheck     # format, lint, type-check
+```
+
+Use `uv run ruff check --fix .` to apply the safe lint fixes, and `pnpm format:check` /
+`uv run ruff format --check .` to check formatting without changing files (for CI).
+
 ## Deployment notes
 
 The frontend calls the API under `/api` on its own origin. In production, serve

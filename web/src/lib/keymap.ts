@@ -61,7 +61,12 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { group: 'Work with items', label: 'Cut', chords: ['mod+x'], action: 'cut' },
   { group: 'Work with items', label: 'Paste here', chords: ['mod+v'], action: 'paste' },
   { group: 'Work with items', label: 'Delete', chords: ['Delete', 'shift+Delete'], action: 'deleteSelected' },
-  { group: 'Work with items', label: 'Open the item’s menu', chords: ['shift+F10', 'ContextMenu'], action: 'contextMenu' },
+  {
+    group: 'Work with items',
+    label: 'Open the item’s menu',
+    chords: ['shift+F10', 'ContextMenu'],
+    action: 'contextMenu',
+  },
 
   { group: 'Upload and view', label: 'New folder', chords: ['alt+n'], action: 'newFolder' },
   { group: 'Upload and view', label: 'Upload files', chords: ['mod+u'], action: 'upload' },

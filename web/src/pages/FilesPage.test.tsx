@@ -75,13 +75,21 @@ beforeEach(() => {
   vi.mocked(moveFolder).mockReset().mockResolvedValue({ success: true, source: '', destination: '', item_count: 2 });
   vi.mocked(copyFolder).mockReset().mockResolvedValue({ success: true, source: '', destination: '', item_count: 2 });
   vi.mocked(createFolder).mockReset().mockResolvedValue({ success: true, folder: REPORTS });
-  vi.mocked(getObjectMetadata).mockReset().mockImplementation(async (key) => makeFile(key));
+  vi.mocked(getObjectMetadata)
+    .mockReset()
+    .mockImplementation(async (key) => makeFile(key));
   vi.mocked(requestPresignedDownload)
     .mockReset()
     .mockResolvedValue({ download_url: 'https://storage.test/get', key: 'k', expires_in: 3600 });
   vi.mocked(requestPresignedUpload)
     .mockReset()
-    .mockImplementation(async (key) => ({ upload_url: 'https://storage.test/put', headers: {}, key, method: 'PUT', expires_in: 900 }));
+    .mockImplementation(async (key) => ({
+      upload_url: 'https://storage.test/put',
+      headers: {},
+      key,
+      method: 'PUT',
+      expires_in: 900,
+    }));
   vi.mocked(uploadFileDirect).mockReset().mockResolvedValue(undefined);
   vi.mocked(triggerBrowserDownload).mockReset();
 });
@@ -136,7 +144,9 @@ describe('FilesPage', () => {
     await user.dblClick(screen.getByText('Reports'));
     await screen.findByText('q1.pdf');
 
-    await user.click(within(screen.getByRole('navigation', { name: 'Folder path' })).getByRole('button', { name: 'All files' }));
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Folder path' })).getByRole('button', { name: 'All files' }),
+    );
     expect(await screen.findByText('report.pdf')).toBeInTheDocument();
     expect(window.location.search).toBe('');
   });
@@ -270,7 +280,13 @@ describe('FilesPage', () => {
     await user.upload(input, file);
 
     await waitFor(() => expect(requestPresignedUpload).toHaveBeenCalledWith('hello.txt', 'text/plain', 5, false));
-    expect(uploadFileDirect).toHaveBeenCalledWith('https://storage.test/put', file, 'text/plain', expect.any(Function), expect.any(AbortSignal));
+    expect(uploadFileDirect).toHaveBeenCalledWith(
+      'https://storage.test/put',
+      file,
+      'text/plain',
+      expect.any(Function),
+      expect.any(AbortSignal),
+    );
     expect(await screen.findByText('1 upload complete')).toBeInTheDocument();
     await waitFor(() => expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore));
   });
@@ -285,7 +301,6 @@ describe('FilesPage', () => {
     await waitFor(() => expect(requestPresignedUpload).toHaveBeenCalledWith('Reports/new.txt', 'text/plain', 1, false));
   });
 });
-
 
 describe('FilesPage organize actions', () => {
   const openMenu = async (user: ReturnType<typeof userEvent.setup>, name: string, item: string) => {
@@ -494,10 +509,17 @@ describe('FilesPage folder upload', () => {
     await screen.findByText('q1.pdf');
 
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Upload folder"]')!;
-    await user.upload(input, [withPath('a.txt', 'Trip/a.txt'), withPath('b.txt', 'Trip/day 2/b.txt'), withPath('.DS_Store', 'Trip/.DS_Store')]);
+    await user.upload(input, [
+      withPath('a.txt', 'Trip/a.txt'),
+      withPath('b.txt', 'Trip/day 2/b.txt'),
+      withPath('.DS_Store', 'Trip/.DS_Store'),
+    ]);
 
     await waitFor(() => expect(requestPresignedUpload).toHaveBeenCalledTimes(2));
-    const keys = vi.mocked(requestPresignedUpload).mock.calls.map((c) => c[0]).sort();
+    const keys = vi
+      .mocked(requestPresignedUpload)
+      .mock.calls.map((c) => c[0])
+      .sort();
     expect(keys).toEqual(['Reports/Trip/a.txt', 'Reports/Trip/day 2/b.txt']);
     expect(await screen.findByText('2 uploads complete')).toBeInTheDocument();
   });
@@ -512,12 +534,21 @@ describe('FilesPage folder upload', () => {
 
   it('uploads a folder dropped on the window and keeps empty folders', async () => {
     await renderPage();
-    const tree = dirEntry('Album', [fileEntry('one.jpg'), dirEntry('Inner', [fileEntry('two.jpg')]), dirEntry('Blank', [])]);
+    const tree = dirEntry('Album', [
+      fileEntry('one.jpg'),
+      dirEntry('Inner', [fileEntry('two.jpg')]),
+      dirEntry('Blank', []),
+    ]);
     const callsBefore = listMock.mock.calls.length;
     dropOnWindow(dropItems(tree));
 
     await waitFor(() => expect(requestPresignedUpload).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(requestPresignedUpload).mock.calls.map((c) => c[0]).sort()).toEqual(['Album/Inner/two.jpg', 'Album/one.jpg']);
+    expect(
+      vi
+        .mocked(requestPresignedUpload)
+        .mock.calls.map((c) => c[0])
+        .sort(),
+    ).toEqual(['Album/Inner/two.jpg', 'Album/one.jpg']);
     await waitFor(() => expect(createFolder).toHaveBeenCalledWith('Album/Blank'));
     await waitFor(() => expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore));
   });
@@ -550,12 +581,11 @@ describe('FilesPage folder upload', () => {
   });
 });
 
-
-
 describe('FilesPage multi-select and bulk actions', () => {
   const check = (user: ReturnType<typeof userEvent.setup>, name: string) =>
     user.click(screen.getByRole('checkbox', { name: `Select ${name}` }));
-  const isChecked = (name: string) => screen.getByRole('checkbox', { name: `Select ${name}` }).getAttribute('aria-checked');
+  const isChecked = (name: string) =>
+    screen.getByRole('checkbox', { name: `Select ${name}` }).getAttribute('aria-checked');
 
   it('shows a bulk bar for several items and hides the details panel', async () => {
     const user = await renderPage();
@@ -748,7 +778,6 @@ describe('FilesPage multi-select and bulk actions', () => {
   });
 });
 
-
 describe('FilesPage drag and drop to move', () => {
   const tile = (name: string) => screen.getByText(name).closest('[draggable="true"]') as HTMLElement;
   const pathNav = () => screen.getByRole('navigation', { name: 'Folder path' });
@@ -821,7 +850,9 @@ describe('FilesPage drag and drop to move', () => {
 
     expect(await screen.findByText('Couldn’t move “report.pdf”')).toBeInTheDocument();
     expect(screen.getAllByText('A file with this name already exists').length).toBeGreaterThan(0);
-    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Select report.pdf' })).toHaveAttribute('aria-checked', 'true'));
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'Select report.pdf' })).toHaveAttribute('aria-checked', 'true'),
+    );
   });
 
   it('does nothing if the drag ends without a drop', async () => {
@@ -847,11 +878,15 @@ describe('FilesPage drag and drop to move', () => {
   it('does not treat moving items around as a file upload', async () => {
     await renderPage();
     startDrag('report.pdf');
-    act(() => void window.dispatchEvent(Object.assign(new Event('dragenter', { cancelable: true }), { dataTransfer: entryDragData() })));
+    act(
+      () =>
+        void window.dispatchEvent(
+          Object.assign(new Event('dragenter', { cancelable: true }), { dataTransfer: entryDragData() }),
+        ),
+    );
     expect(screen.queryByText('Drop to upload')).not.toBeInTheDocument();
   });
 });
-
 
 describe('FilesPage drag-move progress', () => {
   // The details panel can briefly show a file's name too, so look the item up among the draggable ones.
@@ -922,9 +957,9 @@ describe('FilesPage drag-move progress', () => {
   });
 });
 
-
 describe('FilesPage keyboard navigation', () => {
-  const item = (name: string) => document.querySelector(`[data-entry-main] [title="${name}"]`)!.closest('[data-entry-main]') as HTMLElement;
+  const item = (name: string) =>
+    document.querySelector(`[data-entry-main] [title="${name}"]`)!.closest('[data-entry-main]') as HTMLElement;
 
   it('selects files with the arrow keys and shows the details of the one under the cursor', async () => {
     const user = await renderPage();
@@ -995,10 +1030,11 @@ describe('FilesPage keyboard navigation', () => {
   });
 });
 
-
 describe('FilesPage keyboard selection', () => {
-  const item = (name: string) => document.querySelector(`[data-entry-main] [title="${name}"]`)!.closest('[data-entry-main]') as HTMLElement;
-  const checked = (name: string) => screen.getByRole('checkbox', { name: `Select ${name}` }).getAttribute('aria-checked') === 'true';
+  const item = (name: string) =>
+    document.querySelector(`[data-entry-main] [title="${name}"]`)!.closest('[data-entry-main]') as HTMLElement;
+  const checked = (name: string) =>
+    screen.getByRole('checkbox', { name: `Select ${name}` }).getAttribute('aria-checked') === 'true';
 
   it('extends the selection with Shift + arrows and shows the bulk bar', async () => {
     const user = await renderPage();
@@ -1047,9 +1083,9 @@ describe('FilesPage keyboard selection', () => {
   });
 });
 
-
 describe('FilesPage keyboard shortcuts', () => {
-  const item = (name: string) => document.querySelector(`[data-entry-main] [title="${name}"]`)!.closest('[data-entry-main]') as HTMLElement;
+  const item = (name: string) =>
+    document.querySelector(`[data-entry-main] [title="${name}"]`)!.closest('[data-entry-main]') as HTMLElement;
   const select = async (user: Awaited<ReturnType<typeof renderPage>>, name: string) => {
     act(() => item(name).focus());
     await user.keyboard(' ');
@@ -1170,9 +1206,9 @@ describe('FilesPage keyboard shortcuts', () => {
   });
 });
 
-
 describe('FilesPage clipboard (Ctrl+C / Ctrl+X / Ctrl+V)', () => {
-  const item = (name: string) => document.querySelector(`[data-entry-main] [title="${name}"]`)!.closest('[data-entry-main]') as HTMLElement;
+  const item = (name: string) =>
+    document.querySelector(`[data-entry-main] [title="${name}"]`)!.closest('[data-entry-main]') as HTMLElement;
   const row = (name: string) => item(name).closest('[data-entry-id]') as HTMLElement;
   const select = async (user: Awaited<ReturnType<typeof renderPage>>, ...names: string[]) => {
     act(() => item(names[0]).focus());
@@ -1216,7 +1252,9 @@ describe('FilesPage clipboard (Ctrl+C / Ctrl+X / Ctrl+V)', () => {
     await openReports(user);
     await user.keyboard('{Control>}v{/Control}');
     expect(await screen.findByText('Couldn’t copy 1 of 2 items')).toBeInTheDocument();
-    expect(within(await screen.findByRole('region', { name: 'Clipboard' })).getByText('1 file copied')).toBeInTheDocument();
+    expect(
+      within(await screen.findByRole('region', { name: 'Clipboard' })).getByText('1 file copied'),
+    ).toBeInTheDocument();
   });
 
   it('moves files with Ctrl+X and Ctrl+V, fading them until they are pasted, then forgets them', async () => {
@@ -1322,9 +1360,9 @@ describe('FilesPage clipboard (Ctrl+C / Ctrl+X / Ctrl+V)', () => {
   });
 });
 
-
 describe('FilesPage clipboard bar', () => {
-  const item = (name: string) => document.querySelector(`[data-entry-main] [title="${name}"]`)!.closest('[data-entry-main]') as HTMLElement;
+  const item = (name: string) =>
+    document.querySelector(`[data-entry-main] [title="${name}"]`)!.closest('[data-entry-main]') as HTMLElement;
   const select = async (user: Awaited<ReturnType<typeof renderPage>>, name: string) => {
     act(() => item(name).focus());
     await user.keyboard(' ');
@@ -1336,7 +1374,9 @@ describe('FilesPage clipboard bar', () => {
     expect(bar()).not.toBeInTheDocument();
     await select(user, 'notes.md');
     await user.keyboard('{Control>}c{/Control}');
-    expect(within(await screen.findByRole('region', { name: 'Clipboard' })).getByText('1 file copied')).toBeInTheDocument();
+    expect(
+      within(await screen.findByRole('region', { name: 'Clipboard' })).getByText('1 file copied'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Paste into All files/ })).toBeEnabled();
 
     await user.dblClick(screen.getByText('Reports'));

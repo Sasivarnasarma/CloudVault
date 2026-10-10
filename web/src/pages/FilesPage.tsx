@@ -83,7 +83,8 @@ export function FilesPage() {
     },
     clearSelection: () => {
       if (selected.length > 0) selection.clear();
-      else if (clipboard.clipboard) clipboard.clear(); // a second Escape forgets what was cut or copied
+      else if (clipboard.clipboard)
+        clipboard.clear(); // a second Escape forgets what was cut or copied
       else return false;
     },
     copy: clipboard.copy,
@@ -112,7 +113,12 @@ export function FilesPage() {
       if (!item) return false;
       const box = item.getBoundingClientRect();
       item.dispatchEvent(
-        new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: box.left + 24, clientY: box.top + 24 }),
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          clientX: box.left + 24,
+          clientY: box.top + 24,
+        }),
       );
     },
     newFolder: () => setFolderDialogOpen(true),
@@ -282,7 +288,12 @@ export function FilesPage() {
           refetch();
         }}
       />
-      <DeleteDialog entries={deletes.pending} loading={deletes.deleting} onConfirm={deletes.confirm} onCancel={deletes.cancel} />
+      <DeleteDialog
+        entries={deletes.pending}
+        loading={deletes.deleting}
+        onConfirm={deletes.confirm}
+        onCancel={deletes.cancel}
+      />
       <TransferDialog
         target={transfers.transfer}
         startPrefix={currentPrefix}

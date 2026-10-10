@@ -88,7 +88,7 @@ function BulkTransferForm({
             checked={replace}
             disabled={running}
             onChange={(e) => setReplace(e.target.checked)}
-            className="size-4 accent-[var(--accent)]"
+            className="size-4 accent-accent"
           />
           Replace files that already exist
         </label>
@@ -100,7 +100,9 @@ function BulkTransferForm({
         </Button>
         <Button variant="primary" onClick={submit} disabled={running}>
           {running && <Spinner />}
-          {running ? `${verb === 'Move' ? 'Moving' : 'Copying'} ${progress.done} of ${progress.total}…` : `${verb} here`}
+          {running
+            ? `${verb === 'Move' ? 'Moving' : 'Copying'} ${progress.done} of ${progress.total}…`
+            : `${verb} here`}
         </Button>
       </div>
     </div>

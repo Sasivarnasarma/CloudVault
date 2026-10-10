@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { ACTION_CHORDS, SHORTCUTS, chordKeys, matchesChord, parseChord } from './keymap';
 
-const press = (key: string, mods: Partial<Record<'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey', boolean>> = {}, code = '') => ({
+const press = (
+  key: string,
+  mods: Partial<Record<'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey', boolean>> = {},
+  code = '',
+) => ({
   key,
   code,
   ctrlKey: false,

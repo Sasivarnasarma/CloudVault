@@ -35,7 +35,9 @@ export function useDeleteActions({
     }
     if (failed.length > 0) {
       toast.error(
-        pending.length === 1 ? `Couldn’t delete “${failed[0].entry.name}”` : `Couldn’t delete ${failed.length} of ${results.length} items`,
+        pending.length === 1
+          ? `Couldn’t delete “${failed[0].entry.name}”`
+          : `Couldn’t delete ${failed.length} of ${results.length} items`,
         { description: failed[0].error },
       );
     }

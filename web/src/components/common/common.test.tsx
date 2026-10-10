@@ -45,10 +45,19 @@ describe('Breadcrumbs', () => {
 describe('Breadcrumbs as drop targets', () => {
   const setup = (dragActive: boolean, currentPrefix = 'docs/2026/q1/') => {
     const onDropToPrefix = vi.fn();
-    render(<Breadcrumbs currentPrefix={currentPrefix} rootLabel="All files" onNavigate={() => {}} dragActive={dragActive} onDropToPrefix={onDropToPrefix} />);
+    render(
+      <Breadcrumbs
+        currentPrefix={currentPrefix}
+        rootLabel="All files"
+        onNavigate={() => {}}
+        dragActive={dragActive}
+        onDropToPrefix={onDropToPrefix}
+      />,
+    );
     return onDropToPrefix;
   };
-  const drop = (name: string) => fireEvent.drop(screen.getByRole('button', { name }), { dataTransfer: entryDragData() });
+  const drop = (name: string) =>
+    fireEvent.drop(screen.getByRole('button', { name }), { dataTransfer: entryDragData() });
 
   it('accepts drops on the root and on every parent folder', () => {
     const onDropToPrefix = setup(true);

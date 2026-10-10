@@ -40,7 +40,12 @@ const menuClass = 'z-50 min-w-44 rounded-xl border border-line bg-surface-2 p-1.
 const menuItemClass =
   'flex cursor-pointer select-none items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-ink outline-none data-[highlighted]:bg-sunken';
 
-function UpButton({ currentPrefix, dragActive, onNavigateUp, onDropToPrefix }: Pick<ToolbarProps, 'currentPrefix' | 'dragActive' | 'onNavigateUp' | 'onDropToPrefix'>) {
+function UpButton({
+  currentPrefix,
+  dragActive,
+  onNavigateUp,
+  onDropToPrefix,
+}: Pick<ToolbarProps, 'currentPrefix' | 'dragActive' | 'onNavigateUp' | 'onDropToPrefix'>) {
   const drop = useDropTarget({
     enabled: !!dragActive && !!currentPrefix && !!onDropToPrefix,
     onDrop: () => onDropToPrefix?.(parentPrefix(currentPrefix)),
@@ -107,7 +112,10 @@ export function Toolbar(props: ToolbarProps) {
               <X className="size-3.5" />
             </button>
           ) : (
-            <Kbd variant="hint" className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 sm:block">
+            <Kbd
+              variant="hint"
+              className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 sm:block"
+            >
               /
             </Kbd>
           )}
@@ -132,7 +140,11 @@ export function Toolbar(props: ToolbarProps) {
               ))}
               <DropdownMenu.Separator className="my-1 h-px bg-line" />
               {(['asc', 'desc'] as const).map((dir) => (
-                <DropdownMenu.Item key={dir} className={menuItemClass} onSelect={() => props.onSortChange(sort.key, dir)}>
+                <DropdownMenu.Item
+                  key={dir}
+                  className={menuItemClass}
+                  onSelect={() => props.onSortChange(sort.key, dir)}
+                >
                   <span className="flex-1">{dir === 'asc' ? 'Ascending' : 'Descending'}</span>
                   {sort.dir === dir && <Check className="size-4 text-accent" />}
                 </DropdownMenu.Item>
@@ -142,10 +154,12 @@ export function Toolbar(props: ToolbarProps) {
         </DropdownMenu.Root>
 
         <div role="group" aria-label="View mode" className="flex rounded-lg border border-line bg-surface p-0.5">
-          {([
-            { id: 'grid', label: 'Grid view', Icon: LayoutGrid },
-            { id: 'list', label: 'List view', Icon: List },
-          ] as const).map(({ id, label, Icon }) => (
+          {(
+            [
+              { id: 'grid', label: 'Grid view', Icon: LayoutGrid },
+              { id: 'list', label: 'List view', Icon: List },
+            ] as const
+          ).map(({ id, label, Icon }) => (
             <button
               key={id}
               type="button"

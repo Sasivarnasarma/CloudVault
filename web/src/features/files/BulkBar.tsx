@@ -39,7 +39,12 @@ export function BulkBar({ entries, busy, onMove, onCopy, onDelete, onClear }: Bu
             <Copy className="size-4" />
             <span className="max-sm:sr-only">Copy to…</span>
           </Button>
-          <Button variant="ghost" className="text-danger hover:bg-danger-soft hover:text-danger" onClick={onDelete} disabled={busy}>
+          <Button
+            variant="ghost"
+            className="text-danger hover:bg-danger-soft hover:text-danger"
+            onClick={onDelete}
+            disabled={busy}
+          >
             <Trash2 className="size-4" />
             <span className="max-sm:sr-only">Delete</span>
           </Button>

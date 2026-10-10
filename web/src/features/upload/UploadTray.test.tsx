@@ -15,13 +15,41 @@ const item = (name: string, status: UploadItem['status'], extra: Partial<UploadI
 
 describe('UploadTray', () => {
   it('renders nothing for an empty queue', () => {
-    render(<UploadTray queue={[]} isUploading={false} onClear={() => {}} onReplace={() => {}} onSkip={() => {}} onCancel={() => {}} onRetry={() => {}} onReplaceAll={() => {}} onSkipAll={() => {}} />);
+    render(
+      <UploadTray
+        queue={[]}
+        isUploading={false}
+        onClear={() => {}}
+        onReplace={() => {}}
+        onSkip={() => {}}
+        onCancel={() => {}}
+        onRetry={() => {}}
+        onReplaceAll={() => {}}
+        onSkipAll={() => {}}
+      />,
+    );
     expect(screen.queryByRole('region', { name: 'Uploads' })).not.toBeInTheDocument();
   });
 
   it('shows overall progress and a progress bar for the active file', () => {
-    const queue = [item('a.txt', 'completed', { progress: 100 }), item('b.txt', 'uploading', { progress: 42 }), item('c.txt', 'pending')];
-    render(<UploadTray queue={queue} isUploading onClear={() => {}} onReplace={() => {}} onSkip={() => {}} onCancel={() => {}} onRetry={() => {}} onReplaceAll={() => {}} onSkipAll={() => {}} />);
+    const queue = [
+      item('a.txt', 'completed', { progress: 100 }),
+      item('b.txt', 'uploading', { progress: 42 }),
+      item('c.txt', 'pending'),
+    ];
+    render(
+      <UploadTray
+        queue={queue}
+        isUploading
+        onClear={() => {}}
+        onReplace={() => {}}
+        onSkip={() => {}}
+        onCancel={() => {}}
+        onRetry={() => {}}
+        onReplaceAll={() => {}}
+        onSkipAll={() => {}}
+      />,
+    );
 
     expect(screen.getByText('Uploading 2 of 3')).toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '42');
@@ -32,13 +60,37 @@ describe('UploadTray', () => {
   });
 
   it('cannot be dismissed while uploading', () => {
-    render(<UploadTray queue={[item('a.txt', 'uploading')]} isUploading onClear={() => {}} onReplace={() => {}} onSkip={() => {}} onCancel={() => {}} onRetry={() => {}} onReplaceAll={() => {}} onSkipAll={() => {}} />);
+    render(
+      <UploadTray
+        queue={[item('a.txt', 'uploading')]}
+        isUploading
+        onClear={() => {}}
+        onReplace={() => {}}
+        onSkip={() => {}}
+        onCancel={() => {}}
+        onRetry={() => {}}
+        onReplaceAll={() => {}}
+        onSkipAll={() => {}}
+      />,
+    );
     expect(screen.getByRole('button', { name: 'Dismiss uploads' })).toBeDisabled();
   });
 
   it('summarizes a finished batch and clears on dismiss', async () => {
     const onClear = vi.fn();
-    render(<UploadTray queue={[item('a.txt', 'completed'), item('b.txt', 'completed')]} isUploading={false} onClear={onClear} onReplace={() => {}} onSkip={() => {}} onCancel={() => {}} onRetry={() => {}} onReplaceAll={() => {}} onSkipAll={() => {}} />);
+    render(
+      <UploadTray
+        queue={[item('a.txt', 'completed'), item('b.txt', 'completed')]}
+        isUploading={false}
+        onClear={onClear}
+        onReplace={() => {}}
+        onSkip={() => {}}
+        onCancel={() => {}}
+        onRetry={() => {}}
+        onReplaceAll={() => {}}
+        onSkipAll={() => {}}
+      />,
+    );
 
     expect(screen.getByText('2 uploads complete')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Dismiss uploads' }));
@@ -46,8 +98,23 @@ describe('UploadTray', () => {
   });
 
   it('reports failures with the reason', () => {
-    const queue = [item('a.txt', 'completed'), item('dup.txt', 'error', { errorMsg: 'A file with this name already exists' })];
-    render(<UploadTray queue={queue} isUploading={false} onClear={() => {}} onReplace={() => {}} onSkip={() => {}} onCancel={() => {}} onRetry={() => {}} onReplaceAll={() => {}} onSkipAll={() => {}} />);
+    const queue = [
+      item('a.txt', 'completed'),
+      item('dup.txt', 'error', { errorMsg: 'A file with this name already exists' }),
+    ];
+    render(
+      <UploadTray
+        queue={queue}
+        isUploading={false}
+        onClear={() => {}}
+        onReplace={() => {}}
+        onSkip={() => {}}
+        onCancel={() => {}}
+        onRetry={() => {}}
+        onReplaceAll={() => {}}
+        onSkipAll={() => {}}
+      />,
+    );
 
     expect(screen.getByText('1 uploaded, 1 failed')).toBeInTheDocument();
     expect(screen.getByLabelText('Failed')).toBeInTheDocument();
@@ -55,7 +122,19 @@ describe('UploadTray', () => {
   });
 
   it('collapses and expands the file list', async () => {
-    render(<UploadTray queue={[item('a.txt', 'completed')]} isUploading={false} onClear={() => {}} onReplace={() => {}} onSkip={() => {}} onCancel={() => {}} onRetry={() => {}} onReplaceAll={() => {}} onSkipAll={() => {}} />);
+    render(
+      <UploadTray
+        queue={[item('a.txt', 'completed')]}
+        isUploading={false}
+        onClear={() => {}}
+        onReplace={() => {}}
+        onSkip={() => {}}
+        onCancel={() => {}}
+        onRetry={() => {}}
+        onReplaceAll={() => {}}
+        onSkipAll={() => {}}
+      />,
+    );
     expect(screen.getByText('a.txt')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Collapse uploads' }));
@@ -68,7 +147,19 @@ describe('UploadTray', () => {
     const onReplace = vi.fn();
     const onSkip = vi.fn();
     const conflict = item('dup.txt', 'conflict', { errorMsg: 'A file with this name already exists' });
-    render(<UploadTray queue={[conflict]} isUploading={false} onClear={() => {}} onReplace={onReplace} onSkip={onSkip} onCancel={() => {}} onRetry={() => {}} onReplaceAll={() => {}} onSkipAll={() => {}} />);
+    render(
+      <UploadTray
+        queue={[conflict]}
+        isUploading={false}
+        onClear={() => {}}
+        onReplace={onReplace}
+        onSkip={onSkip}
+        onCancel={() => {}}
+        onRetry={() => {}}
+        onReplaceAll={() => {}}
+        onSkipAll={() => {}}
+      />,
+    );
 
     expect(screen.getByText('1 file already exists')).toBeInTheDocument();
     expect(screen.getByText('A file with this name already exists')).toBeInTheDocument();
@@ -80,7 +171,19 @@ describe('UploadTray', () => {
 
   it('disables replace and skip while another upload is running', () => {
     const queue = [item('dup.txt', 'conflict', { errorMsg: 'exists' }), item('b.txt', 'uploading')];
-    render(<UploadTray queue={queue} isUploading onClear={() => {}} onReplace={() => {}} onSkip={() => {}} onCancel={() => {}} onRetry={() => {}} onReplaceAll={() => {}} onSkipAll={() => {}} />);
+    render(
+      <UploadTray
+        queue={queue}
+        isUploading
+        onClear={() => {}}
+        onReplace={() => {}}
+        onSkip={() => {}}
+        onCancel={() => {}}
+        onRetry={() => {}}
+        onReplaceAll={() => {}}
+        onSkipAll={() => {}}
+      />,
+    );
     expect(screen.getByRole('button', { name: 'Replace dup.txt' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Skip dup.txt' })).toBeDisabled();
   });
@@ -89,7 +192,17 @@ describe('UploadTray', () => {
     const onCancel = vi.fn();
     const queue = [item('a.txt', 'uploading', { progress: 42 }), item('b.txt', 'pending'), item('c.txt', 'completed')];
     render(
-      <UploadTray queue={queue} isUploading onClear={() => {}} onReplace={() => {}} onSkip={() => {}} onCancel={onCancel} onRetry={() => {}} onReplaceAll={() => {}} onSkipAll={() => {}} />,
+      <UploadTray
+        queue={queue}
+        isUploading
+        onClear={() => {}}
+        onReplace={() => {}}
+        onSkip={() => {}}
+        onCancel={onCancel}
+        onRetry={() => {}}
+        onReplaceAll={() => {}}
+        onSkipAll={() => {}}
+      />,
     );
 
     expect(screen.getByText('42%')).toBeInTheDocument();
@@ -106,7 +219,17 @@ describe('UploadTray', () => {
     const failed = item('bad.bin', 'error', { errorMsg: 'Network error occurred during direct storage upload' });
     const stopped = item('stopped.bin', 'cancelled', { errorMsg: 'Upload cancelled' });
     render(
-      <UploadTray queue={[failed, stopped]} isUploading={false} onClear={() => {}} onReplace={() => {}} onSkip={onSkip} onCancel={() => {}} onRetry={onRetry} onReplaceAll={() => {}} onSkipAll={() => {}} />,
+      <UploadTray
+        queue={[failed, stopped]}
+        isUploading={false}
+        onClear={() => {}}
+        onReplace={() => {}}
+        onSkip={onSkip}
+        onCancel={() => {}}
+        onRetry={onRetry}
+        onReplaceAll={() => {}}
+        onSkipAll={() => {}}
+      />,
     );
 
     expect(screen.getByText('0 uploaded, 2 failed')).toBeInTheDocument();
@@ -120,9 +243,22 @@ describe('UploadTray', () => {
   it('offers Replace all and Skip all when several files already exist', async () => {
     const onReplaceAll = vi.fn();
     const onSkipAll = vi.fn();
-    const queue = [item('a.txt', 'conflict', { errorMsg: 'exists' }), item('b.txt', 'conflict', { errorMsg: 'exists' })];
+    const queue = [
+      item('a.txt', 'conflict', { errorMsg: 'exists' }),
+      item('b.txt', 'conflict', { errorMsg: 'exists' }),
+    ];
     render(
-      <UploadTray queue={queue} isUploading={false} onClear={() => {}} onReplace={() => {}} onSkip={() => {}} onCancel={() => {}} onRetry={() => {}} onReplaceAll={onReplaceAll} onSkipAll={onSkipAll} />,
+      <UploadTray
+        queue={queue}
+        isUploading={false}
+        onClear={() => {}}
+        onReplace={() => {}}
+        onSkip={() => {}}
+        onCancel={() => {}}
+        onRetry={() => {}}
+        onReplaceAll={onReplaceAll}
+        onSkipAll={onSkipAll}
+      />,
     );
     expect(screen.getByText('2 files already exist', { selector: 'span' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Replace all' }));
@@ -133,7 +269,17 @@ describe('UploadTray', () => {
 
   it('does not show bulk actions for a single conflict', () => {
     render(
-      <UploadTray queue={[item('a.txt', 'conflict', { errorMsg: 'exists' })]} isUploading={false} onClear={() => {}} onReplace={() => {}} onSkip={() => {}} onCancel={() => {}} onRetry={() => {}} onReplaceAll={() => {}} onSkipAll={() => {}} />,
+      <UploadTray
+        queue={[item('a.txt', 'conflict', { errorMsg: 'exists' })]}
+        isUploading={false}
+        onClear={() => {}}
+        onReplace={() => {}}
+        onSkip={() => {}}
+        onCancel={() => {}}
+        onRetry={() => {}}
+        onReplaceAll={() => {}}
+        onSkipAll={() => {}}
+      />,
     );
     expect(screen.queryByRole('button', { name: 'Replace all' })).not.toBeInTheDocument();
   });
@@ -144,7 +290,17 @@ describe('UploadTray', () => {
       ...Array.from({ length: 150 }, (_, i) => item(`todo-${i}.txt`, 'pending')),
     ];
     render(
-      <UploadTray queue={queue} isUploading onClear={() => {}} onReplace={() => {}} onSkip={() => {}} onCancel={() => {}} onRetry={() => {}} onReplaceAll={() => {}} onSkipAll={() => {}} />,
+      <UploadTray
+        queue={queue}
+        isUploading
+        onClear={() => {}}
+        onReplace={() => {}}
+        onSkip={() => {}}
+        onCancel={() => {}}
+        onRetry={() => {}}
+        onReplaceAll={() => {}}
+        onSkipAll={() => {}}
+      />,
     );
     expect(screen.getAllByRole('listitem')).toHaveLength(101); // 100 rows + the summary line
     expect(screen.getByText('todo-0.txt')).toBeInTheDocument();
@@ -153,7 +309,19 @@ describe('UploadTray', () => {
   });
 
   it('uses singular wording for a single upload', () => {
-    render(<UploadTray queue={[item('a.txt', 'completed')]} isUploading={false} onClear={() => {}} onReplace={() => {}} onSkip={() => {}} onCancel={() => {}} onRetry={() => {}} onReplaceAll={() => {}} onSkipAll={() => {}} />);
+    render(
+      <UploadTray
+        queue={[item('a.txt', 'completed')]}
+        isUploading={false}
+        onClear={() => {}}
+        onReplace={() => {}}
+        onSkip={() => {}}
+        onCancel={() => {}}
+        onRetry={() => {}}
+        onReplaceAll={() => {}}
+        onSkipAll={() => {}}
+      />,
+    );
     expect(screen.getByText('1 upload complete')).toBeInTheDocument();
   });
 });

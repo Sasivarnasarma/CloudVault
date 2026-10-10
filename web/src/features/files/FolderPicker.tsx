@@ -17,9 +17,9 @@ interface FolderPickerProps {
 
 /** Lets the user browse the bucket's folders and pick a destination. */
 export function FolderPicker({ prefix, onNavigate, excludedPrefix, excludedPrefixes }: FolderPickerProps) {
-  const [state, setState] = useState<{ prefix: string; folders: FolderObject[] } | { prefix: string; error: string } | null>(
-    null,
-  );
+  const [state, setState] = useState<
+    { prefix: string; folders: FolderObject[] } | { prefix: string; error: string } | null
+  >(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,7 +32,10 @@ export function FolderPicker({ prefix, onNavigate, excludedPrefix, excludedPrefi
   }, [prefix]);
 
   const current = state && state.prefix === prefix ? state : null;
-  const folders = current && 'folders' in current ? current.folders.filter((f) => f.prefix !== excludedPrefix && !excludedPrefixes?.includes(f.prefix)) : [];
+  const folders =
+    current && 'folders' in current
+      ? current.folders.filter((f) => f.prefix !== excludedPrefix && !excludedPrefixes?.includes(f.prefix))
+      : [];
 
   return (
     <div className="rounded-xl border border-line bg-surface">
@@ -41,7 +44,11 @@ export function FolderPicker({ prefix, onNavigate, excludedPrefix, excludedPrefi
       </div>
       <div className="h-48 overflow-y-auto p-1.5">
         {!current ? (
-          <div role="status" aria-label="Loading folders" className="flex h-full items-center justify-center text-ink-3">
+          <div
+            role="status"
+            aria-label="Loading folders"
+            className="flex h-full items-center justify-center text-ink-3"
+          >
             <Spinner className="size-5" />
           </div>
         ) : 'error' in current ? (

@@ -1,9 +1,4 @@
-import type {
-  MultipartCompleteResponse,
-  MultipartPlan,
-  PartUrlsResponse,
-  UploadedPartsResponse,
-} from '../types';
+import type { MultipartCompleteResponse, MultipartPlan, PartUrlsResponse, UploadedPartsResponse } from '../types';
 import { jsonBody, request } from './http';
 
 const BASE = '/api/uploads/multipart';

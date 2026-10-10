@@ -6,7 +6,10 @@ const WIDTH = '22rem';
 type InspectorProps = Parameters<typeof Inspector>[0];
 
 /** Slides the file details in from the right while a file is selected. */
-export function InspectorPanel({ file, ...props }: Omit<InspectorProps, 'file'> & { file: InspectorProps['file'] | null }) {
+export function InspectorPanel({
+  file,
+  ...props
+}: Omit<InspectorProps, 'file'> & { file: InspectorProps['file'] | null }) {
   return (
     <AnimatePresence initial={false}>
       {file && (

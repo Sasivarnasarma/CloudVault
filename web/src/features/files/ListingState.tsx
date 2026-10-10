@@ -21,7 +21,16 @@ interface ListingStateProps {
 }
 
 /** Shows the right thing for the folder: an error, a skeleton while loading, an empty message or the listing. */
-export function ListingState({ error, loading, empty, filtered, view, onRetry, onClearFilters, children }: ListingStateProps) {
+export function ListingState({
+  error,
+  loading,
+  empty,
+  filtered,
+  view,
+  onRetry,
+  onClearFilters,
+  children,
+}: ListingStateProps) {
   if (error) {
     return (
       <StateMessage icon={AlertCircle} tone="danger" title="Unable to load files" description={error}>

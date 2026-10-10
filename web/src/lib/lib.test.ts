@@ -7,7 +7,8 @@ import { formatBytes, formatDate, formatRelativeDate } from './formatters';
 
 describe('cn / errorMessage', () => {
   it('merges conflicting tailwind classes and drops falsy values', () => {
-    expect(cn('px-2 py-1', false && 'hidden', 'px-4')).toBe('py-1 px-4');
+    const hidden = false as boolean;
+    expect(cn('px-2 py-1', hidden && 'hidden', 'px-4')).toBe('py-1 px-4');
   });
 
   it('uses the message of real errors and the fallback otherwise', () => {
@@ -76,16 +77,44 @@ describe('sortEntries', () => {
   const names = (list: Entry[]) => list.map((e) => e.name);
 
   it('keeps folders first and sorts names naturally', () => {
-    expect(names(sortEntries(entries, 'name', 'asc'))).toEqual(['alpha', 'zeta', 'a.txt', 'b.txt', 'c2.txt', 'c10.txt']);
+    expect(names(sortEntries(entries, 'name', 'asc'))).toEqual([
+      'alpha',
+      'zeta',
+      'a.txt',
+      'b.txt',
+      'c2.txt',
+      'c10.txt',
+    ]);
   });
 
   it('reverses both groups for descending names', () => {
-    expect(names(sortEntries(entries, 'name', 'desc'))).toEqual(['zeta', 'alpha', 'c10.txt', 'c2.txt', 'b.txt', 'a.txt']);
+    expect(names(sortEntries(entries, 'name', 'desc'))).toEqual([
+      'zeta',
+      'alpha',
+      'c10.txt',
+      'c2.txt',
+      'b.txt',
+      'a.txt',
+    ]);
   });
 
   it('sorts files by size and modified date while folders stay alphabetical', () => {
-    expect(names(sortEntries(entries, 'size', 'asc'))).toEqual(['alpha', 'zeta', 'c2.txt', 'a.txt', 'c10.txt', 'b.txt']);
-    expect(names(sortEntries(entries, 'modified', 'desc'))).toEqual(['alpha', 'zeta', 'c2.txt', 'a.txt', 'b.txt', 'c10.txt']);
+    expect(names(sortEntries(entries, 'size', 'asc'))).toEqual([
+      'alpha',
+      'zeta',
+      'c2.txt',
+      'a.txt',
+      'c10.txt',
+      'b.txt',
+    ]);
+    expect(names(sortEntries(entries, 'modified', 'desc'))).toEqual([
+      'alpha',
+      'zeta',
+      'c2.txt',
+      'a.txt',
+      'b.txt',
+      'c10.txt',
+    ]);
   });
 
   it('does not mutate its input', () => {

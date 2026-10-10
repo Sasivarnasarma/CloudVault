@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type FocusEvent, type RefObject } from 'react';
 import type { Entry } from '../../lib/entries';
-import { extendTypeAhead, isNavKey, isTypeAheadChar, nextIndex, typeAheadMatch, type TypeAhead } from '../../lib/listNav';
+import {
+  extendTypeAhead,
+  isNavKey,
+  isTypeAheadChar,
+  nextIndex,
+  typeAheadMatch,
+  type TypeAhead,
+} from '../../lib/listNav';
 
 interface Options {
   entries: Entry[];
@@ -69,7 +76,8 @@ export function useEntryNavigation(options: Options) {
 
   // Where the cursor is now: its item if it still exists, otherwise the nearest position.
   const found = cursor ? entries.findIndex((e) => e.id === cursor.id) : -1;
-  const cursorIndex = entries.length === 0 ? -1 : found !== -1 ? found : Math.min(cursor?.index ?? 0, entries.length - 1);
+  const cursorIndex =
+    entries.length === 0 ? -1 : found !== -1 ? found : Math.min(cursor?.index ?? 0, entries.length - 1);
   const tabStopId = cursorIndex === -1 ? null : entries[cursorIndex].id;
 
   const latest = useRef({ options, cursor, cursorIndex });

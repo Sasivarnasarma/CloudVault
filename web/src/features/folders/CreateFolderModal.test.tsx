@@ -12,9 +12,7 @@ const createMock = vi.mocked(createFolder);
 function setup(targetPrefix = 'docs/') {
   const onClose = vi.fn();
   const onFolderCreated = vi.fn();
-  render(
-    <CreateFolderModal isOpen onClose={onClose} targetPrefix={targetPrefix} onFolderCreated={onFolderCreated} />,
-  );
+  render(<CreateFolderModal isOpen onClose={onClose} targetPrefix={targetPrefix} onFolderCreated={onFolderCreated} />);
   return { onClose, onFolderCreated, input: screen.getByLabelText('Folder name') };
 }
 
@@ -48,16 +46,19 @@ describe('CreateFolderModal', () => {
     await waitFor(() => expect(createMock).toHaveBeenCalledWith('top'));
   });
 
-  it.each(['a/b', 'a\\b', 'what?', 'a:b', '..', '.'])('rejects the invalid name %j without calling the API', async (name) => {
-    const { input, onClose } = setup();
-    await userEvent.type(input, name);
-    await userEvent.click(screen.getByRole('button', { name: 'Create folder' }));
+  it.each(['a/b', 'a\\b', 'what?', 'a:b', '..', '.'])(
+    'rejects the invalid name %j without calling the API',
+    async (name) => {
+      const { input, onClose } = setup();
+      await userEvent.type(input, name);
+      await userEvent.click(screen.getByRole('button', { name: 'Create folder' }));
 
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
-    expect(input).toHaveAttribute('aria-invalid', 'true');
-    expect(createMock).not.toHaveBeenCalled();
-    expect(onClose).not.toHaveBeenCalled();
-  });
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(createMock).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+    },
+  );
 
   it('shows the API error (e.g. folder already exists) and stays open', async () => {
     createMock.mockRejectedValueOnce(new ApiError('A folder with this name already exists', 409));

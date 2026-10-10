@@ -77,7 +77,16 @@ function deferred<T = void>() {
 }
 
 beforeEach(() => {
-  for (const m of [presignMock, uploadMock, partMock, createMock, partUrlsMock, listPartsMock, completeMock, abortMock]) {
+  for (const m of [
+    presignMock,
+    uploadMock,
+    partMock,
+    createMock,
+    partUrlsMock,
+    listPartsMock,
+    completeMock,
+    abortMock,
+  ]) {
     m.mockReset();
   }
   presignMock.mockImplementation(async (key) => ({
@@ -277,10 +286,19 @@ describe('useUpload: queue behaviour', () => {
 
     let batch!: Promise<void>;
     act(() => {
-      batch = result.current.startUploads(['a', 'b', 'c', 'd', 'e'].map((n) => file(`${n}.txt`)), '');
+      batch = result.current.startUploads(
+        ['a', 'b', 'c', 'd', 'e'].map((n) => file(`${n}.txt`)),
+        '',
+      );
     });
     await waitFor(() => expect(gates).toHaveLength(3));
-    expect(result.current.queue.map((q) => q.status)).toEqual(['uploading', 'uploading', 'uploading', 'pending', 'pending']);
+    expect(result.current.queue.map((q) => q.status)).toEqual([
+      'uploading',
+      'uploading',
+      'uploading',
+      'pending',
+      'pending',
+    ]);
 
     for (let i = 0; i < 5; i++) {
       await waitFor(() => expect(gates.length).toBeGreaterThan(i));
@@ -324,7 +342,10 @@ describe('useUpload: queue behaviour', () => {
 
     let batch!: Promise<void>;
     act(() => {
-      batch = result.current.startUploads(['a', 'b', 'c', 'd'].map((n) => file(`${n}.txt`)), '');
+      batch = result.current.startUploads(
+        ['a', 'b', 'c', 'd'].map((n) => file(`${n}.txt`)),
+        '',
+      );
     });
     await waitFor(() => expect(gates).toHaveLength(3));
 
@@ -445,7 +466,9 @@ describe('useUpload: multipart uploads', () => {
   });
 
   it('gives up after repeated failures and keeps the upload for a later retry', async () => {
-    partMock.mockRejectedValue(new TransferError('Network error occurred during direct storage upload', { retryable: true }));
+    partMock.mockRejectedValue(
+      new TransferError('Network error occurred during direct storage upload', { retryable: true }),
+    );
     const { result } = renderHook(() => useUpload());
     await act(() => result.current.startUploads([bigFile('down.bin', 3 * PART_SIZE)], ''));
 
@@ -538,7 +561,9 @@ describe('useUpload: multipart uploads', () => {
   it('discards the stored parts when a failed upload is dismissed or the queue is cleared', async () => {
     partMock.mockRejectedValue(new TransferError('HTTP status 400', { status: 400, retryable: false }));
     const { result } = renderHook(() => useUpload());
-    await act(() => result.current.startUploads([bigFile('a.bin', 3 * PART_SIZE), bigFile('b.bin', 3 * PART_SIZE)], ''));
+    await act(() =>
+      result.current.startUploads([bigFile('a.bin', 3 * PART_SIZE), bigFile('b.bin', 3 * PART_SIZE)], ''),
+    );
     expect(result.current.queue.every((q) => q.status === 'error')).toBe(true);
 
     act(() => result.current.dismissItem(result.current.queue[0].id));

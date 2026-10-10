@@ -43,7 +43,15 @@ const FILTERS: { id: CategoryFilter; label: string; icon: ComponentType<{ classN
   { id: 'media', label: 'Audio & video', icon: Music2 },
 ];
 
-function ConnectionStatus({ health, loading, error }: { health: HealthResponse | null; loading: boolean; error: boolean }) {
+function ConnectionStatus({
+  health,
+  loading,
+  error,
+}: {
+  health: HealthResponse | null;
+  loading: boolean;
+  error: boolean;
+}) {
   const online = !!health?.storage_connected;
   const state = loading ? 'Connecting…' : error ? 'API offline' : online ? 'Connected' : 'Storage unreachable';
   const dot = loading ? 'bg-ink-3 animate-pulse' : online ? 'bg-accent' : 'bg-danger';

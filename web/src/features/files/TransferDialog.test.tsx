@@ -31,7 +31,9 @@ const nameInput = () => screen.getByLabelText('Name');
 const submitButton = (name: string) => screen.getByRole('button', { name });
 
 beforeEach(() => {
-  vi.mocked(listObjects).mockReset().mockImplementation(async (prefix = '') => TREE[prefix] ?? makeListing(prefix));
+  vi.mocked(listObjects)
+    .mockReset()
+    .mockImplementation(async (prefix = '') => TREE[prefix] ?? makeListing(prefix));
   vi.mocked(moveObject).mockReset().mockResolvedValue({ success: true, source: '', destination: '' });
   vi.mocked(copyObject).mockReset().mockResolvedValue({ success: true, source: '', destination: '' });
   vi.mocked(moveFolder).mockReset().mockResolvedValue({ success: true, source: '', destination: '', item_count: 3 });
@@ -120,7 +122,11 @@ describe('TransferDialog', () => {
     });
 
     it('refuses to move or copy a folder into itself', async () => {
-      const { user } = setup({ ...folderEntry, folder: makeFolder('docs'), id: 'docs/', name: 'docs' }, 'copy', 'docs/');
+      const { user } = setup(
+        { ...folderEntry, folder: makeFolder('docs'), id: 'docs/', name: 'docs' },
+        'copy',
+        'docs/',
+      );
       expect(await screen.findByText('A folder can’t be moved or copied into itself.')).toBeInTheDocument();
       expect(submitButton('Copy here')).toBeDisabled();
       await user.click(screen.getByRole('button', { name: 'Cancel' }));

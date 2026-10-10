@@ -99,7 +99,12 @@ export function UploadTray({
               {conflictCount > 1 && (
                 <li className="flex items-center gap-2 bg-sunken/60 px-4 py-2">
                   <span className="flex-1 text-xs text-ink-3">{conflictCount} files already exist</span>
-                  <Button variant="secondary" className="h-7 px-2.5 text-xs" disabled={isUploading} onClick={onReplaceAll}>
+                  <Button
+                    variant="secondary"
+                    className="h-7 px-2.5 text-xs"
+                    disabled={isUploading}
+                    onClick={onReplaceAll}
+                  >
                     Replace all
                   </Button>
                   <Button variant="ghost" className="h-7 px-2.5 text-xs" disabled={isUploading} onClick={onSkipAll}>

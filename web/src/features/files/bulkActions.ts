@@ -64,7 +64,11 @@ export async function transferEntry(
   if (entry.type === 'folder') {
     const source = entry.folder.prefix;
     if (`${target}/`.startsWith(source)) {
-      throw new Error(target === source.replace(/\/$/, '') ? 'Already in this folder' : 'A folder can’t be moved or copied into itself');
+      throw new Error(
+        target === source.replace(/\/$/, '')
+          ? 'Already in this folder'
+          : 'A folder can’t be moved or copied into itself',
+      );
     }
     await (mode === 'move' ? moveFolder(source, target) : copyFolder(source, target));
     return;

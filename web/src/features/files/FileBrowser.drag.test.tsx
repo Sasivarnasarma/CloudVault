@@ -19,7 +19,11 @@ const entries: Entry[] = [
 
 function renderBrowser(
   view: ViewMode,
-  { selected = [], dragIds = null, busyIds = [] }: { selected?: string[]; dragIds?: string[] | null; busyIds?: string[] } = {},
+  {
+    selected = [],
+    dragIds = null,
+    busyIds = [],
+  }: { selected?: string[]; dragIds?: string[] | null; busyIds?: string[] } = {},
 ) {
   const h = {
     onOpenFolder: vi.fn(),
@@ -38,7 +42,15 @@ function renderBrowser(
     onSortChange: vi.fn(),
   };
   render(
-    <FileBrowser entries={entries} view={view} selection={new Set(selected)} sort={{ key: 'name', dir: 'asc' }} dragIds={dragIds} busyIds={busyIds} {...h} />,
+    <FileBrowser
+      entries={entries}
+      view={view}
+      selection={new Set(selected)}
+      sort={{ key: 'name', dir: 'asc' }}
+      dragIds={dragIds}
+      busyIds={busyIds}
+      {...h}
+    />,
   );
   return h;
 }

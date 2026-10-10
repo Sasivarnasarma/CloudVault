@@ -22,7 +22,9 @@ export function sortEntries(entries: Entry[], key: SortKey, dir: SortDir): Entry
     return byName(a, b);
   };
 
-  const folders = entries.filter((e) => e.type === 'folder').sort((a, b) => byName(a, b) * (key === 'name' ? factor : 1));
+  const folders = entries
+    .filter((e) => e.type === 'folder')
+    .sort((a, b) => byName(a, b) * (key === 'name' ? factor : 1));
   const files = entries.filter((e) => e.type === 'file').sort((a, b) => compare(a, b) * factor);
   return [...folders, ...files];
 }

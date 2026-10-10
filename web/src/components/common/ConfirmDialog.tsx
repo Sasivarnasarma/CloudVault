@@ -21,7 +21,12 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && !loading && onCancel()} title={title} description={description}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => !next && !loading && onCancel()}
+      title={title}
+      description={description}
+    >
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onCancel} disabled={loading}>
           Cancel

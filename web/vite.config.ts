@@ -1,11 +1,11 @@
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
-import { loadEnv } from 'vite'
-import { defineConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+import { loadEnv } from 'vite';
+import { defineConfig } from 'vitest/config';
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
+  const env = loadEnv(mode, process.cwd(), '');
 
   return {
     plugins: [react(), tailwindcss()],
@@ -41,5 +41,5 @@ export default defineConfig(({ mode }) => {
       css: false,
       testTimeout: 15000,
     },
-  }
-})
+  };
+});

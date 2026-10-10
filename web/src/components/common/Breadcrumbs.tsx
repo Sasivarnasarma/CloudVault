@@ -40,7 +40,13 @@ function Crumb({ label, prefix, current, dropEnabled, onNavigate, onDropToPrefix
   );
 }
 
-export function Breadcrumbs({ currentPrefix, rootLabel, onNavigate, dragActive = false, onDropToPrefix }: BreadcrumbsProps) {
+export function Breadcrumbs({
+  currentPrefix,
+  rootLabel,
+  onNavigate,
+  dragActive = false,
+  onDropToPrefix,
+}: BreadcrumbsProps) {
   const parts = currentPrefix ? currentPrefix.replace(/\/+$/, '').split('/') : [];
   const crumbs = [
     { label: rootLabel, prefix: '' },
@@ -49,7 +55,7 @@ export function Breadcrumbs({ currentPrefix, rootLabel, onNavigate, dragActive =
 
   return (
     <nav aria-label="Folder path" className="min-w-0 flex-1">
-      <ol className="flex items-center gap-0.5 overflow-x-auto whitespace-nowrap [scrollbar-width:none]">
+      <ol className="flex items-center gap-0.5 overflow-x-auto whitespace-nowrap scrollbar-none">
         {crumbs.map((crumb, i) => {
           const isLast = i === crumbs.length - 1;
           return (

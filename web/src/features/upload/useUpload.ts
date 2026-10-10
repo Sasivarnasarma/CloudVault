@@ -91,7 +91,13 @@ export function useUpload() {
   const uploadSingle = async (item: UploadItem, overwrite: boolean, signal: AbortSignal) => {
     const contentType = item.file.type || 'application/octet-stream';
     const presign = await asConflict(requestPresignedUpload(item.key, contentType, item.file.size, overwrite));
-    await uploadFileDirect(presign.upload_url, item.file, contentType, (percent) => patchItem(item.id, { progress: percent }), signal);
+    await uploadFileDirect(
+      presign.upload_url,
+      item.file,
+      contentType,
+      (percent) => patchItem(item.id, { progress: percent }),
+      signal,
+    );
   };
 
   const uploadMultipart = async (item: UploadItem, overwrite: boolean, signal: AbortSignal) => {
@@ -174,7 +180,11 @@ export function useUpload() {
         if (cancelled.current.has(item.id)) return; // cancelled while waiting for a slot
         const controller = new AbortController();
         controllers.current.set(item.id, controller);
-        patchItem(item.id, { status: 'uploading', errorMsg: undefined, ...(sessions.current.has(item.id) ? {} : { progress: 0 }) });
+        patchItem(item.id, {
+          status: 'uploading',
+          errorMsg: undefined,
+          ...(sessions.current.has(item.id) ? {} : { progress: 0 }),
+        });
 
         try {
           if (item.file.size > MULTIPART_THRESHOLD) await uploadMultipart(item, overwrite, controller.signal);
@@ -195,6 +205,8 @@ export function useUpload() {
         release();
       }
     },
+    // uploadSingle / uploadMultipart only use refs and `patchItem`, so they never go stale.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
     [patchItem],
   );
 
@@ -209,7 +221,11 @@ export function useUpload() {
     }
   }, []);
 
-  const startUploads = async (sources: Array<File | UploadSource>, targetPrefix: string, onAllComplete?: () => void) => {
+  const startUploads = async (
+    sources: Array<File | UploadSource>,
+    targetPrefix: string,
+    onAllComplete?: () => void,
+  ) => {
     if (sources.length === 0) return;
 
     const cleanPrefix = targetPrefix ? targetPrefix.replace(/\/+$/, '') + '/' : '';

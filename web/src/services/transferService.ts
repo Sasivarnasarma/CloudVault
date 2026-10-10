@@ -47,7 +47,12 @@ function putBlob(url: string, body: Blob, { contentType, onProgress, signal }: P
       cleanup();
       if (xhr.status >= 200 && xhr.status < 300) return resolve();
       const retryable = xhr.status >= 500 || xhr.status === 408 || xhr.status === 429 || xhr.status === 403;
-      reject(new TransferError(`Direct storage upload failed with HTTP status ${xhr.status}`, { status: xhr.status, retryable }));
+      reject(
+        new TransferError(`Direct storage upload failed with HTTP status ${xhr.status}`, {
+          status: xhr.status,
+          retryable,
+        }),
+      );
     };
     xhr.onerror = () => {
       cleanup();

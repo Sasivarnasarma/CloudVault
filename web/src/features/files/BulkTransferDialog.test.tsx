@@ -27,9 +27,13 @@ function setup(target: BulkTransferTarget, startPrefix = '') {
 }
 
 beforeEach(() => {
-  vi.mocked(listObjects).mockReset().mockImplementation(async (prefix = '') => TREE[prefix] ?? makeListing(prefix));
-  for (const m of [moveObject, copyObject]) vi.mocked(m).mockReset().mockResolvedValue({ success: true, source: '', destination: '' });
-  for (const m of [moveFolder, copyFolder]) vi.mocked(m).mockReset().mockResolvedValue({ success: true, source: '', destination: '', item_count: 1 });
+  vi.mocked(listObjects)
+    .mockReset()
+    .mockImplementation(async (prefix = '') => TREE[prefix] ?? makeListing(prefix));
+  for (const m of [moveObject, copyObject])
+    vi.mocked(m).mockReset().mockResolvedValue({ success: true, source: '', destination: '' });
+  for (const m of [moveFolder, copyFolder])
+    vi.mocked(m).mockReset().mockResolvedValue({ success: true, source: '', destination: '', item_count: 1 });
 });
 
 describe('BulkTransferDialog', () => {
@@ -39,7 +43,10 @@ describe('BulkTransferDialog', () => {
   });
 
   it('moves every selected item into the chosen folder', async () => {
-    const { user, onDone, onClose } = setup({ mode: 'move', entries: [file('a.txt'), file('b.txt'), folder('Photos')] });
+    const { user, onDone, onClose } = setup({
+      mode: 'move',
+      entries: [file('a.txt'), file('b.txt'), folder('Photos')],
+    });
     expect(screen.getByRole('dialog', { name: 'Move 3 items' })).toBeInTheDocument();
     expect(screen.getByText('2 files and 1 folder')).toBeInTheDocument();
 
@@ -107,7 +114,9 @@ describe('BulkTransferDialog', () => {
 
   it('shows progress while working and blocks cancelling', async () => {
     const gate: { release: () => void } = { release: () => {} };
-    vi.mocked(moveObject).mockImplementation(() => new Promise((resolve) => (gate.release = () => resolve({ success: true, source: '', destination: '' }))));
+    vi.mocked(moveObject).mockImplementation(
+      () => new Promise((resolve) => (gate.release = () => resolve({ success: true, source: '', destination: '' }))),
+    );
     const { user, onClose } = setup({ mode: 'move', entries: [file('a.txt')] });
     await user.click(await screen.findByRole('button', { name: 'Archive' }));
     await user.click(screen.getByRole('button', { name: 'Move here' }));

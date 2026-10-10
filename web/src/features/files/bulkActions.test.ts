@@ -19,7 +19,9 @@ const folder = (name: string, parent = ''): Entry => {
 
 beforeEach(() => {
   for (const m of [copyObject, deleteObject, moveObject, copyFolder, deleteFolder, moveFolder]) {
-    vi.mocked(m).mockReset().mockResolvedValue({} as never);
+    vi.mocked(m)
+      .mockReset()
+      .mockResolvedValue({} as never);
   }
 });
 
@@ -53,12 +55,15 @@ describe('runBulk', () => {
   it('works through the list a few at a time', async () => {
     let running = 0;
     let peak = 0;
-    await runBulk(Array.from({ length: 10 }, (_, i) => file(`f${i}`)), async () => {
-      running++;
-      peak = Math.max(peak, running);
-      await new Promise((r) => setTimeout(r, 2));
-      running--;
-    });
+    await runBulk(
+      Array.from({ length: 10 }, (_, i) => file(`f${i}`)),
+      async () => {
+        running++;
+        peak = Math.max(peak, running);
+        await new Promise((r) => setTimeout(r, 2));
+        running--;
+      },
+    );
     expect(peak).toBe(4);
   });
 

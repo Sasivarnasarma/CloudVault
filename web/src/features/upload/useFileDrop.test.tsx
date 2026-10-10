@@ -59,7 +59,10 @@ describe('useFileDrop', () => {
     expect(result.current.dragging).toBe(false);
     expect(onScanStart).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(onDrop).toHaveBeenCalledTimes(1));
-    expect(onDrop.mock.calls[0][0].sources.map((s: { path: string }) => s.path).sort()).toEqual(['Docs/a.txt', 'Docs/sub/b.txt']);
+    expect(onDrop.mock.calls[0][0].sources.map((s: { path: string }) => s.path).sort()).toEqual([
+      'Docs/a.txt',
+      'Docs/sub/b.txt',
+    ]);
     await waitFor(() => expect(onScanEnd).toHaveBeenCalledTimes(1));
   });
 

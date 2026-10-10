@@ -128,7 +128,11 @@ describe('useObjects', () => {
 
   describe('pagination', () => {
     const page = (names: string[], next: string | null, prefix = ''): ObjectListResponse => ({
-      ...makeListing(prefix, [], names.map((n) => makeFile(n, { size: 10 }))),
+      ...makeListing(
+        prefix,
+        [],
+        names.map((n) => makeFile(n, { size: 10 })),
+      ),
       next_cursor: next,
       has_more: next !== null,
     });

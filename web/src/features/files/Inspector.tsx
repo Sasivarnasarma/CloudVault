@@ -35,7 +35,7 @@ function ImagePreview({ file }: { file: FileObject }) {
 
   if (failed) return null;
   return (
-    <div className="mb-5 flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl border border-line bg-sunken">
+    <div className="mb-5 flex aspect-4/3 items-center justify-center overflow-hidden rounded-xl border border-line bg-sunken">
       {src ? (
         <img src={src} alt={file.name} onError={() => setFailed(true)} className="size-full object-contain" />
       ) : (
@@ -94,7 +94,7 @@ export function Inspector({ file, bucket, onClose, onDownload, onDelete, onTrans
         {isImage ? (
           <ImagePreview file={file} />
         ) : (
-          <div className="mb-5 flex aspect-[4/3] items-center justify-center rounded-xl border border-line bg-sunken">
+          <div className="mb-5 flex aspect-4/3 items-center justify-center rounded-xl border border-line bg-sunken">
             <FileIcon file={file} size="lg" />
           </div>
         )}
@@ -109,7 +109,11 @@ export function Inspector({ file, bucket, onClose, onDownload, onDelete, onTrans
             <Download className="size-4" />
             Download
           </Button>
-          <IconButton label="Delete file" className="border border-line-strong text-danger hover:bg-danger-soft hover:text-danger" onClick={() => onDelete(file)}>
+          <IconButton
+            label="Delete file"
+            className="border border-line-strong text-danger hover:bg-danger-soft hover:text-danger"
+            onClick={() => onDelete(file)}
+          >
             <Trash2 className="size-4" />
           </IconButton>
         </div>

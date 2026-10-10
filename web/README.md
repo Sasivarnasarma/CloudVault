@@ -6,5 +6,8 @@ React + TypeScript + Tailwind frontend for CloudVault. See the [root README](../
 pnpm install
 pnpm dev      # dev server with /api proxy
 pnpm build    # type-check and production build
-pnpm lint
+pnpm test     # Vitest + Testing Library
+pnpm lint     # oxlint
+pnpm format   # Prettier (pnpm format:check only checks)
+pnpm typecheck
 ```

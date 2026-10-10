@@ -194,7 +194,7 @@ function GridTile({ entry, index, selected, selection, handlers: h, drag, tabSto
         data-entry-id={entry.id}
         style={{ animationDelay: `${Math.min(index * 15, 200)}ms` }}
         className={cn(
-          'group relative select-none rounded-2xl border bg-surface transition [animation:cv-rise_0.22s_ease-out_backwards] [contain-intrinsic-size:auto_9rem] [content-visibility:auto]',
+          'group relative select-none rounded-2xl border bg-surface transition animate-rise [contain-intrinsic-size:auto_9rem] [content-visibility:auto]',
           selected
             ? 'border-accent bg-accent-soft shadow-card'
             : 'border-line hover:-translate-y-0.5 hover:border-line-strong hover:shadow-card',
@@ -229,7 +229,12 @@ function GridTile({ entry, index, selected, selection, handlers: h, drag, tabSto
             selected || anySelected ? 'opacity-100' : 'opacity-0',
           )}
         >
-          <SelectBox checked={selected} label={`Select ${entry.name}`} onChange={() => h.onToggleSelect(entry.id)} tabbable={tabStop} />
+          <SelectBox
+            checked={selected}
+            label={`Select ${entry.name}`}
+            onChange={() => h.onToggleSelect(entry.id)}
+            tabbable={tabStop}
+          />
         </div>
         <div className="absolute right-2 top-2 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
           <EntryMoreMenu items={items} label={entry.name} tabbable={tabStop} />
@@ -260,11 +265,11 @@ function ListRow({ entry, index, selected, selection, handlers: h, drag, tabStop
         data-entry-id={entry.id}
         style={{ animationDelay: `${Math.min(index * 12, 150)}ms` }}
         className={cn(
-          'group select-none border-b border-line/60 transition [animation:cv-fade_0.2s_ease-out_backwards]',
+          'group select-none border-b border-line/60 transition animate-fade',
           selected ? 'bg-accent-soft' : 'hover:bg-surface',
           (dnd.dragging || cut) && 'opacity-40',
           dnd.busy && 'pointer-events-none opacity-60',
-          dnd.over && 'bg-accent-soft outline outline-2 -outline-offset-2 outline-accent',
+          dnd.over && 'bg-accent-soft outline-2 -outline-offset-2 outline-accent',
         )}
         aria-busy={dnd.busy || undefined}
       >
@@ -274,7 +279,9 @@ function ListRow({ entry, index, selected, selection, handlers: h, drag, tabStop
             label={`Select ${entry.name}`}
             onChange={() => h.onToggleSelect(entry.id)}
             tabbable={tabStop}
-            className={cn(!selected && selection.size === 0 && 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100')}
+            className={cn(
+              !selected && selection.size === 0 && 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100',
+            )}
           />
         </td>
         <td className="py-1.5 pl-2 pr-4">
@@ -293,7 +300,10 @@ function ListRow({ entry, index, selected, selection, handlers: h, drag, tabStop
             </span>
           </button>
         </td>
-        <td className="hidden px-4 text-ink-3 md:table-cell" title={entry.type === 'file' ? formatDate(entry.file.last_modified) : undefined}>
+        <td
+          className="hidden px-4 text-ink-3 md:table-cell"
+          title={entry.type === 'file' ? formatDate(entry.file.last_modified) : undefined}
+        >
           {entry.type === 'file' ? formatRelativeDate(entry.file.last_modified) : '—'}
         </td>
         <td className="hidden px-4 font-mono text-xs text-ink-3 sm:table-cell">
@@ -301,7 +311,11 @@ function ListRow({ entry, index, selected, selection, handlers: h, drag, tabStop
         </td>
         <td className="px-2 text-right">
           {dnd.busy ? (
-            <span role="status" aria-label={`Moving ${entry.name}`} className="inline-flex size-8 items-center justify-center text-accent">
+            <span
+              role="status"
+              aria-label={`Moving ${entry.name}`}
+              className="inline-flex size-8 items-center justify-center text-accent"
+            >
               <Spinner />
             </span>
           ) : (
@@ -387,7 +401,11 @@ export function FileBrowser(props: FileBrowserProps) {
 
   if (view === 'grid') {
     return (
-      <div ref={setContainer} onFocus={nav.onFocus} className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-3 p-5">
+      <div
+        ref={setContainer}
+        onFocus={nav.onFocus}
+        className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-3 p-5"
+      >
         {entries.map((entry, i) => (
           <GridTile
             key={entry.id}
@@ -421,8 +439,20 @@ export function FileBrowser(props: FileBrowserProps) {
             />
           </th>
           <SortHeader label="Name" sortKey="name" sort={sort} onSortChange={onSortChange} className="pl-2" />
-          <SortHeader label="Modified" sortKey="modified" sort={sort} onSortChange={onSortChange} className="hidden w-44 md:table-cell" />
-          <SortHeader label="Size" sortKey="size" sort={sort} onSortChange={onSortChange} className="hidden w-28 sm:table-cell" />
+          <SortHeader
+            label="Modified"
+            sortKey="modified"
+            sort={sort}
+            onSortChange={onSortChange}
+            className="hidden w-44 md:table-cell"
+          />
+          <SortHeader
+            label="Size"
+            sortKey="size"
+            sort={sort}
+            onSortChange={onSortChange}
+            className="hidden w-28 sm:table-cell"
+          />
           <th scope="col" className="w-14 px-2">
             <span className="sr-only">Actions</span>
           </th>

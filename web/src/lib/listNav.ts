@@ -7,7 +7,16 @@ export interface NavLayout {
   pageSize: number;
 }
 
-export const NAV_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'] as const;
+export const NAV_KEYS = [
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'Home',
+  'End',
+  'PageUp',
+  'PageDown',
+] as const;
 
 export function isNavKey(key: string): boolean {
   return (NAV_KEYS as readonly string[]).includes(key);
