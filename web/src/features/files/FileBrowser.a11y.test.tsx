@@ -25,6 +25,7 @@ function renderBrowser(view: ViewMode, selected: string[] = [], list = files) {
     onToggleSelect: vi.fn(),
     onSelectRange: vi.fn(),
     onDownload: vi.fn(),
+    onPreview: vi.fn(),
     onDelete: vi.fn(),
     onTransfer: vi.fn(),
     onDownloadZip: vi.fn(),

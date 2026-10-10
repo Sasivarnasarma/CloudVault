@@ -15,6 +15,7 @@ import { FileBrowser } from '../features/files/FileBrowser';
 import { InspectorPanel } from '../features/files/InspectorPanel';
 import { ListingState } from '../features/files/ListingState';
 import { LoadMore } from '../features/files/LoadMore';
+import { PreviewDialog } from '../features/preview/PreviewDialog';
 import { ShortcutsDialog } from '../features/files/ShortcutsDialog';
 import { StatusBar } from '../features/files/StatusBar';
 import { TransferDialog } from '../features/files/TransferDialog';
@@ -38,6 +39,7 @@ import { useAppView } from '../hooks/useAppView';
 import { useHealth } from '../hooks/useHealth';
 import { useTheme } from '../hooks/useTheme';
 import type { Entry } from '../lib/entries';
+import { canPreview } from '../lib/previewKind';
 import { folderLabel } from '../lib/paths';
 
 const ROOT_LABEL = 'All files';
@@ -59,6 +61,7 @@ export function FilesPage() {
   const [navOpen, setNavOpen] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const selected = useMemo(
@@ -69,6 +72,12 @@ export function FilesPage() {
   const onlySelected = selected.length === 1 ? selected[0] : null;
   const selectedFile = onlySelected?.type === 'file' ? onlySelected.file : null;
   const bulkEntries = selected.length > 1 || selected.some((e) => e.type === 'folder') ? selected : [];
+
+  // The files in this folder that can be previewed; the dialog steps through them.
+  const previewable = useMemo(
+    () => view.entries.flatMap((e) => (e.type === 'file' && canPreview(e.file) ? [e.file] : [])),
+    [view.entries],
+  );
 
   const refresh = () => {
     health.reload();
@@ -278,6 +287,7 @@ export function FilesPage() {
                     onDragEnd={drag.endDrag}
                     onDropOnFolder={drag.dropOn}
                     onDownload={downloadFile}
+                    onPreview={(file) => setPreviewKey(file.key)}
                     onDownloadZip={zip.download}
                     onCut={(entry) => clipboard.cut(targetsOf(entry))}
                     onCopy={(entry) => clipboard.copy(targetsOf(entry))}
@@ -314,6 +324,7 @@ export function FilesPage() {
               bucket={health.health?.bucket}
               onClose={selection.clear}
               onDownload={downloadFile}
+              onPreview={(file) => setPreviewKey(file.key)}
               onDelete={(file) => void trash.request([{ type: 'file', id: file.key, name: file.name, file }])}
               onTransfer={(file, mode) =>
                 transfers.openTransfer({ entry: { type: 'file', id: file.key, name: file.name, file }, mode })
@@ -334,8 +345,10 @@ export function FilesPage() {
       <UploadPickers
         fileInputRef={uploads.fileInputRef}
         folderInputRef={uploads.folderInputRef}
+        resumeInputRef={uploads.resumeInputRef}
         onFiles={uploads.uploadFiles}
         onFolder={uploads.uploadContent}
+        onResume={uploads.resumeUploads}
       />
 
       <CreateFolderModal
@@ -364,6 +377,13 @@ export function FilesPage() {
         startPrefix={currentPrefix}
         onClose={() => transfers.openBulkTransfer(null)}
         onDone={transfers.onBulkTransferDone}
+      />
+      <PreviewDialog
+        files={previewable}
+        currentKey={previewKey}
+        onChange={setPreviewKey}
+        onClose={() => setPreviewKey(null)}
+        onDownload={downloadFile}
       />
       <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 

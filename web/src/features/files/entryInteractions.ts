@@ -5,6 +5,7 @@ import {
   CopyPlus,
   Download,
   FolderInput,
+  Eye,
   FolderOpen,
   Info,
   Pencil,
@@ -14,6 +15,7 @@ import {
 import type { MouseEvent } from 'react';
 import type { MenuItem } from '../../components/common/EntryMenu';
 import type { Entry } from '../../lib/entries';
+import { canPreview } from '../../lib/previewKind';
 import type { EntryHandlers } from './browserTypes';
 
 /** The right-click / "more" menu of an entry. */
@@ -43,6 +45,7 @@ export function menuFor(entry: Entry, h: EntryHandlers): MenuItem[] {
     ];
   }
   return [
+    ...(canPreview(entry.file) ? [{ label: 'Preview', icon: Eye, onSelect: () => h.onPreview(entry.file) }] : []),
     { label: 'Details', icon: Info, onSelect: () => h.onChoose(entry.id) },
     { label: 'Download', icon: Download, onSelect: () => h.onDownload(entry.file.key, entry.name) },
     ...clipboard,
@@ -62,9 +65,10 @@ export function handleClick(e: MouseEvent, entry: Entry, h: EntryHandlers) {
   else h.onChoose(entry.id);
 }
 
-/** Double-click opens a folder or downloads a file. */
+/** Double-click opens a folder, previews a file the browser can show, or downloads any other. */
 export function handleDoubleClick(e: MouseEvent, entry: Entry, h: EntryHandlers) {
   if (e.shiftKey || e.ctrlKey || e.metaKey) return;
   if (entry.type === 'folder') h.onOpenFolder(entry.folder.prefix);
+  else if (canPreview(entry.file)) h.onPreview(entry.file);
   else h.onDownload(entry.file.key, entry.name);
 }

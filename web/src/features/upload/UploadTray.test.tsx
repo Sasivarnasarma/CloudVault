@@ -324,4 +324,56 @@ describe('UploadTray', () => {
     );
     expect(screen.getByText('1 upload complete')).toBeInTheDocument();
   });
+
+  describe('unfinished uploads', () => {
+    const unfinished = [
+      {
+        key: 'docs/big.bin',
+        uploadId: 'u1',
+        partSize: 10,
+        partCount: 3,
+        contentType: 'application/octet-stream',
+        fileName: 'big.bin',
+        size: 30 * 1024 * 1024,
+        lastModified: 1,
+        startedAt: 1,
+      },
+    ];
+    const baseProps = {
+      isUploading: false,
+      onClear: () => {},
+      onReplace: () => {},
+      onSkip: () => {},
+      onCancel: () => {},
+      onRetry: () => {},
+      onReplaceAll: () => {},
+      onSkipAll: () => {},
+    };
+
+    it('lists uploads left over from before a refresh, even with an empty queue', () => {
+      render(<UploadTray {...baseProps} queue={[]} unfinished={unfinished} />);
+      expect(screen.getByRole('heading', { name: '1 unfinished upload' })).toBeInTheDocument();
+      expect(screen.getByText('big.bin')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Resume…' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Dismiss uploads' })).not.toBeInTheDocument();
+    });
+
+    it('asks to pick the files again, and can discard one', async () => {
+      const onResume = vi.fn();
+      const onDiscardUnfinished = vi.fn();
+      render(
+        <UploadTray
+          {...baseProps}
+          queue={[]}
+          unfinished={unfinished}
+          onResume={onResume}
+          onDiscardUnfinished={onDiscardUnfinished}
+        />,
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Resume…' }));
+      expect(onResume).toHaveBeenCalled();
+      await userEvent.click(screen.getByRole('button', { name: 'Discard big.bin' }));
+      expect(onDiscardUnfinished).toHaveBeenCalledWith('u1');
+    });
+  });
 });

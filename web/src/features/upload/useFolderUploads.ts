@@ -14,6 +14,7 @@ export function useFolderUploads(currentPrefix: string, onRefresh: () => void) {
   const { startUploads } = queue;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const resumeInputRef = useRef<HTMLInputElement>(null);
   const scanToast = useRef<{ timer: number; id?: string | number }>({ timer: 0 });
 
   const uploadContent = useCallback(
@@ -43,6 +44,25 @@ export function useFolderUploads(currentPrefix: string, onRefresh: () => void) {
     [uploadContent],
   );
 
+  const { resumeFiles } = queue;
+  const resumeUploads = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+      const unmatched = await resumeFiles(files, onRefresh);
+      if (unmatched.length === files.length) {
+        toast.error(
+          files.length === 1
+            ? `“${files[0].name}” isn’t one of the unfinished uploads`
+            : 'None of those files are unfinished uploads',
+          { description: 'Pick the same file again, unchanged since it was started.' },
+        );
+      } else if (unmatched.length > 0) {
+        toast.info(`${unmatched.length} of the files weren’t unfinished uploads and were skipped.`);
+      }
+    },
+    [resumeFiles, onRefresh],
+  );
+
   const { dragging } = useFileDrop({
     onDrop: uploadContent,
     // Reading a big folder tree can take a while: only mention it if it does.
@@ -66,12 +86,17 @@ export function useFolderUploads(currentPrefix: string, onRefresh: () => void) {
     uploadFiles,
     fileInputRef,
     folderInputRef,
+    resumeInputRef,
+    resumeUploads,
     openFilePicker: () => fileInputRef.current?.click(),
     openFolderPicker: () => folderInputRef.current?.click(),
     /** Props for the upload tray. */
     tray: {
       queue: queue.queue,
       isUploading: queue.isUploading,
+      unfinished: queue.unfinished,
+      onResume: () => resumeInputRef.current?.click(),
+      onDiscardUnfinished: queue.discardUnfinished,
       onClear: queue.clearQueue,
       onReplace: (item: Parameters<typeof queue.replaceItem>[0]) => queue.replaceItem(item, onRefresh),
       onSkip: queue.dismissItem,

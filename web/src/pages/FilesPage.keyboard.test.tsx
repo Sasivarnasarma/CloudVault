@@ -28,12 +28,13 @@ describe('FilesPage keyboard navigation', () => {
     expect(screen.getByRole('checkbox', { name: 'Select photo.png' })).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('keeps a file selected when Enter is pressed on it', async () => {
+  it('previews a file with Enter and keeps it selected', async () => {
     const user = await renderPage();
     item('notes.md').focus();
     await user.keyboard('{ArrowDown}{ArrowUp}{Enter}');
-    expect(screen.getByRole('checkbox', { name: 'Select notes.md' })).toHaveAttribute('aria-checked', 'true');
-    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('dialog', { name: 'notes.md' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(screen.getByRole('checkbox', { name: 'Select notes.md' })).toHaveAttribute('aria-checked', 'true');
   });
 

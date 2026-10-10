@@ -28,6 +28,7 @@ function renderBrowser(view: ViewMode, selected: string[] = []) {
     onDragEnd: vi.fn(),
     onDropOnFolder: vi.fn(),
     onDownload: vi.fn(),
+    onPreview: vi.fn(),
     onDelete: vi.fn(),
     onTransfer: vi.fn(),
     onDownloadZip: vi.fn(),

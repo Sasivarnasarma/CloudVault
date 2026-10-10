@@ -77,6 +77,7 @@ function deferred<T = void>() {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   for (const m of [
     presignMock,
     uploadMock,
@@ -595,5 +596,126 @@ describe('useUpload: multipart uploads', () => {
     const after = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(after);
     expect(after.defaultPrevented).toBe(false);
+  });
+});
+
+describe('useUpload: resuming after a refresh', () => {
+  /** Start a three-part upload that stops after part 1, as if the page was closed. */
+  async function interruptedUpload(name = 'big.bin') {
+    const big = bigFile(name, 3 * PART_SIZE);
+    partMock.mockImplementation(async (url, blob, onProgress) => {
+      if (!url.endsWith('/1')) throw new TransferError('HTTP status 400', { status: 400, retryable: false });
+      onProgress?.(blob.size);
+    });
+    const first = renderHook(() => useUpload());
+    await act(() => first.result.current.startUploads([big], 'docs'));
+    first.unmount();
+    partUrlsMock.mockClear();
+    partMock.mockReset();
+    partMock.mockImplementation(async (_url, blob, onProgress) => onProgress?.(blob.size));
+    return big;
+  }
+
+  it('remembers a started multipart upload and forgets it once it is complete', async () => {
+    const { result } = renderHook(() => useUpload());
+    await act(() => result.current.startUploads([bigFile('ok.bin', 3 * PART_SIZE)], ''));
+
+    expect(completeMock).toHaveBeenCalled();
+    expect(localStorage.getItem('cloudvault:pending-uploads')).toBeNull();
+    expect(result.current.unfinished).toEqual([]);
+  });
+
+  it('lists the upload that was cut short after a reload, but not as part of the new queue', async () => {
+    await interruptedUpload();
+    const { result } = renderHook(() => useUpload());
+
+    expect(result.current.queue).toEqual([]);
+    expect(result.current.unfinished).toEqual([
+      expect.objectContaining({ key: 'docs/big.bin', uploadId: 'u1', fileName: 'big.bin', partCount: 3 }),
+    ]);
+  });
+
+  it('continues it from the same file, sending only the parts storage does not have', async () => {
+    const big = await interruptedUpload();
+    listPartsMock.mockResolvedValue({ parts: [{ part_number: 1, size: PART_SIZE, etag: 'e1' }] });
+    const done = vi.fn();
+    const { result } = renderHook(() => useUpload());
+
+    let unmatched!: File[];
+    await act(async () => {
+      unmatched = await result.current.resumeFiles([big], done);
+    });
+
+    expect(unmatched).toEqual([]);
+    expect(createMock).toHaveBeenCalledTimes(1); // only the original start
+    expect(listPartsMock).toHaveBeenCalledWith('docs/big.bin', 'u1');
+    expect(partUrlsMock.mock.calls.map((c) => c[2])).toEqual(expect.arrayContaining([[2], [3]]));
+    expect(partUrlsMock).not.toHaveBeenCalledWith('docs/big.bin', 'u1', [1]);
+    expect(completeMock).toHaveBeenCalledWith('docs/big.bin', 'u1', 3);
+    expect(result.current.queue[0]).toMatchObject({ key: 'docs/big.bin', status: 'completed' });
+    expect(result.current.unfinished).toEqual([]);
+    expect(localStorage.getItem('cloudvault:pending-uploads')).toBeNull();
+    expect(done).toHaveBeenCalled();
+  });
+
+  it('only continues with a file that matches, and gives back the others', async () => {
+    await interruptedUpload();
+    const { result } = renderHook(() => useUpload());
+    const other = bigFile('big.bin', 3 * PART_SIZE + 1); // same name, different size
+
+    let unmatched!: File[];
+    await act(async () => {
+      unmatched = await result.current.resumeFiles([other]);
+    });
+
+    expect(unmatched).toEqual([other]);
+    expect(result.current.queue).toEqual([]);
+    expect(listPartsMock).not.toHaveBeenCalled();
+    expect(result.current.unfinished).toHaveLength(1);
+  });
+
+  it('starts over when storage no longer has the upload', async () => {
+    const big = await interruptedUpload();
+    listPartsMock.mockRejectedValue(new ApiError('The upload was not found', 404));
+    createMock.mockResolvedValue({ key: 'docs/big.bin', upload_id: 'u2', part_size: PART_SIZE, part_count: 3 });
+    const { result } = renderHook(() => useUpload());
+
+    await act(async () => void (await result.current.resumeFiles([big])));
+
+    expect(createMock).toHaveBeenCalledTimes(2);
+    expect(completeMock).toHaveBeenCalledWith('docs/big.bin', 'u2', 3);
+    expect(result.current.queue[0].status).toBe('completed');
+    expect(localStorage.getItem('cloudvault:pending-uploads')).toBeNull();
+  });
+
+  it('can give up on it, which frees the stored parts', async () => {
+    await interruptedUpload();
+    const { result } = renderHook(() => useUpload());
+
+    act(() => result.current.discardUnfinished('u1'));
+
+    expect(abortMock).toHaveBeenCalledWith('docs/big.bin', 'u1');
+    expect(result.current.unfinished).toEqual([]);
+    expect(localStorage.getItem('cloudvault:pending-uploads')).toBeNull();
+  });
+
+  it('frees uploads that have been waiting for too long', async () => {
+    const old = {
+      key: 'old.bin',
+      uploadId: 'old1',
+      partSize: PART_SIZE,
+      partCount: 2,
+      contentType: 'application/octet-stream',
+      fileName: 'old.bin',
+      size: 2 * PART_SIZE,
+      lastModified: 1,
+      startedAt: Date.now() - 8 * 24 * 60 * 60 * 1000,
+    };
+    localStorage.setItem('cloudvault:pending-uploads', JSON.stringify([old]));
+
+    const { result } = renderHook(() => useUpload());
+
+    expect(result.current.unfinished).toEqual([]);
+    await waitFor(() => expect(abortMock).toHaveBeenCalledWith('old.bin', 'old1'));
   });
 });

@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { delay, runPool, Semaphore } from '../../lib/concurrency';
 import { errorMessage } from '../../lib/cn';
+import {
+  forgetPendingUpload,
+  isSameFile,
+  loadPendingUploads,
+  rememberPendingUpload,
+  type PendingUpload,
+} from '../../lib/pendingUploads';
 import { ApiError } from '../../services/http';
 import {
   abortMultipartUpload,
@@ -31,6 +38,8 @@ export interface UploadItem {
    */
   status: 'pending' | 'uploading' | 'completed' | 'error' | 'conflict' | 'cancelled';
   errorMsg?: string;
+  /** The multipart upload this file is being sent as, once one has been started. */
+  uploadId?: string;
 }
 
 /** A file to upload, optionally with a path (including the file name) relative to the target folder. */
@@ -66,8 +75,13 @@ export function useUpload() {
   const cancelled = useRef(new Set<string>());
   const fileSlots = useRef(new Semaphore(FILE_CONCURRENCY));
   const nextId = useRef(0);
+  // Large uploads that were started and never finished, kept so they survive a refresh.
+  const [stored] = useState(loadPendingUploads);
+  const [pending, setPending] = useState<PendingUpload[]>(stored.pending);
 
   const isUploading = queue.some(isActive);
+  // Left over from before a refresh: not part of this session's queue.
+  const unfinished = pending.filter((p) => !queue.some((q) => q.uploadId === p.uploadId));
 
   useEffect(() => {
     queueRef.current = queue;
@@ -83,6 +97,16 @@ export function useUpload() {
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [isUploading]);
+
+  // Parts of uploads that were left for too long only cost storage: free them.
+  useEffect(() => {
+    stored.expired.forEach((p) => abortMultipartUpload(p.key, p.uploadId).catch(() => undefined));
+  }, [stored]);
+
+  const forget = useCallback((uploadId: string) => {
+    forgetPendingUpload(uploadId);
+    setPending((prev) => prev.filter((p) => p.uploadId !== uploadId));
+  }, []);
 
   const patchItem = useCallback((id: string, patch: Partial<UploadItem>) => {
     setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, ...patch } : q)));
@@ -105,10 +129,23 @@ export function useUpload() {
     let session = sessions.current.get(item.id);
     const done = new Set<number>();
 
+    if (session) {
+      // Resuming: ask storage which parts it already has.
+      try {
+        const stored = await listUploadedParts(key, session.uploadId);
+        stored.parts.forEach((p) => done.add(p.part_number));
+      } catch (err) {
+        if (!(err instanceof ApiError && err.status === 404)) throw err;
+        // Storage no longer has the upload (finished, cancelled or expired): start it over.
+        sessions.current.delete(item.id);
+        forget(session.uploadId);
+        session = undefined;
+      }
+    }
+
     if (!session) {
-      const plan = await asConflict(
-        createMultipartUpload(key, file.size, file.type || 'application/octet-stream', overwrite),
-      );
+      const contentType = file.type || 'application/octet-stream';
+      const plan = await asConflict(createMultipartUpload(key, file.size, contentType, overwrite));
       session = { uploadId: plan.upload_id, partSize: plan.part_size, partCount: plan.part_count };
       if (signal.aborted) {
         // Cancelled while the upload was being created: don't leave an orphan behind.
@@ -116,11 +153,21 @@ export function useUpload() {
         throw new DOMException('Upload cancelled', 'AbortError');
       }
       sessions.current.set(item.id, session);
-    } else {
-      // Resuming: ask storage which parts it already has.
-      const stored = await listUploadedParts(key, session.uploadId);
-      stored.parts.forEach((p) => done.add(p.part_number));
+      const record: PendingUpload = {
+        key,
+        uploadId: session.uploadId,
+        partSize: session.partSize,
+        partCount: session.partCount,
+        contentType,
+        fileName: file.name,
+        size: file.size,
+        lastModified: file.lastModified,
+        startedAt: Date.now(),
+      };
+      rememberPendingUpload(record);
+      setPending((prev) => [...prev.filter((p) => p.uploadId !== record.uploadId), record]);
     }
+    patchItem(item.id, { uploadId: session.uploadId });
 
     const { uploadId, partSize, partCount } = session;
     const partBytes = (n: number) => Math.min(n * partSize, file.size) - (n - 1) * partSize;
@@ -171,6 +218,7 @@ export function useUpload() {
 
     await completeMultipartUpload(key, uploadId, partCount);
     sessions.current.delete(item.id);
+    forget(uploadId);
   };
 
   const run = useCallback(
@@ -205,21 +253,25 @@ export function useUpload() {
         release();
       }
     },
-    // uploadSingle / uploadMultipart only use refs and `patchItem`, so they never go stale.
+    // uploadSingle / uploadMultipart only use refs, `patchItem` and `forget`, so they never go stale.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-    [patchItem],
+    [patchItem, forget],
   );
 
   /** Free the storage held by a half-finished multipart upload. */
-  const discard = useCallback((item: UploadItem) => {
-    cancelled.current.add(item.id);
-    controllers.current.get(item.id)?.abort();
-    const session = sessions.current.get(item.id);
-    if (session) {
-      sessions.current.delete(item.id);
-      abortMultipartUpload(item.key, session.uploadId).catch(() => undefined);
-    }
-  }, []);
+  const discard = useCallback(
+    (item: UploadItem) => {
+      cancelled.current.add(item.id);
+      controllers.current.get(item.id)?.abort();
+      const session = sessions.current.get(item.id);
+      if (session) {
+        sessions.current.delete(item.id);
+        forget(session.uploadId);
+        abortMultipartUpload(item.key, session.uploadId).catch(() => undefined);
+      }
+    },
+    [forget],
+  );
 
   const startUploads = async (
     sources: Array<File | UploadSource>,
@@ -268,6 +320,52 @@ export function useUpload() {
     patchItem(id, { status: 'cancelled', errorMsg: 'Upload cancelled' });
   };
 
+  /**
+   * Continue unfinished uploads from files the user picked again. A file continues the upload it
+   * matches (same name, size and modified time); the parts already in storage are not sent again.
+   * Returns the files that matched nothing.
+   */
+  const resumeFiles = async (files: File[], onAllComplete?: () => void): Promise<File[]> => {
+    const open = unfinished.slice();
+    const unmatched: File[] = [];
+    const items: UploadItem[] = [];
+    for (const file of files) {
+      const index = open.findIndex((p) => isSameFile(p, file));
+      if (index < 0) {
+        unmatched.push(file);
+        continue;
+      }
+      const [upload] = open.splice(index, 1);
+      const item: UploadItem = {
+        id: `upload-${Date.now()}-${nextId.current++}`,
+        file,
+        key: upload.key,
+        progress: 0,
+        status: 'pending',
+        uploadId: upload.uploadId,
+      };
+      sessions.current.set(item.id, {
+        uploadId: upload.uploadId,
+        partSize: upload.partSize,
+        partCount: upload.partCount,
+      });
+      items.push(item);
+    }
+    if (items.length === 0) return unmatched;
+
+    setQueue((prev) => (prev.some(isActive) ? [...prev, ...items] : items));
+    await Promise.all(items.map((item) => run(item, false)));
+    onAllComplete?.();
+    return unmatched;
+  };
+
+  /** Give up on an unfinished upload and free the parts already stored. */
+  const discardUnfinished = (uploadId: string) => {
+    const upload = pending.find((p) => p.uploadId === uploadId);
+    forget(uploadId);
+    if (upload) abortMultipartUpload(upload.key, upload.uploadId).catch(() => undefined);
+  };
+
   /** Replace every file that is waiting on a name conflict. */
   const replaceConflicts = async (onComplete?: () => void) => {
     const conflicts = queueRef.current.filter((q) => q.status === 'conflict');
@@ -296,6 +394,9 @@ export function useUpload() {
     queue,
     isUploading,
     startUploads,
+    unfinished,
+    resumeFiles,
+    discardUnfinished,
     replaceItem,
     retryItem,
     cancelItem,

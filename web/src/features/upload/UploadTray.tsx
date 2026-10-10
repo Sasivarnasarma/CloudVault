@@ -4,12 +4,17 @@ import { useState } from 'react';
 import { Button, IconButton } from '../../components/common/Button';
 import { cn } from '../../lib/cn';
 import { formatBytes } from '../../lib/formatters';
+import type { PendingUpload } from '../../lib/pendingUploads';
 import type { UploadItem } from './useUpload';
 import { Spinner } from '../../components/common/Spinner';
 
 interface UploadTrayProps {
   queue: UploadItem[];
   isUploading: boolean;
+  /** Large uploads left over from before a refresh, which can be continued. */
+  unfinished?: PendingUpload[];
+  onResume?: () => void;
+  onDiscardUnfinished?: (uploadId: string) => void;
   onClear: () => void;
   onReplace: (item: UploadItem) => void;
   onSkip: (id: string) => void;
@@ -37,7 +42,8 @@ function StatusIcon({ status }: { status: UploadItem['status'] }) {
   return <span className="size-2 rounded-full bg-line-strong" aria-label="Waiting" />;
 }
 
-function heading(queue: UploadItem[], isUploading: boolean): string {
+function heading(queue: UploadItem[], isUploading: boolean, unfinished: number): string {
+  if (queue.length === 0) return `${unfinished} unfinished upload${unfinished === 1 ? '' : 's'}`;
   const count = (status: UploadItem['status']) => queue.filter((q) => q.status === status).length;
   const done = count('completed');
   const conflicts = count('conflict');
@@ -55,6 +61,9 @@ function heading(queue: UploadItem[], isUploading: boolean): string {
 export function UploadTray({
   queue,
   isUploading,
+  unfinished = [],
+  onResume,
+  onDiscardUnfinished,
   onClear,
   onReplace,
   onSkip,
@@ -69,7 +78,7 @@ export function UploadTray({
 
   return (
     <AnimatePresence>
-      {queue.length > 0 && (
+      {(queue.length > 0 || unfinished.length > 0) && (
         <motion.section
           aria-label="Uploads"
           initial={{ opacity: 0, y: 24, scale: 0.97 }}
@@ -80,7 +89,7 @@ export function UploadTray({
         >
           <header className="flex items-center gap-2 px-4 py-2.5">
             <h2 className="flex-1 text-sm font-semibold text-ink" aria-live="polite">
-              {heading(queue, isUploading)}
+              {heading(queue, isUploading, unfinished.length)}
             </h2>
             <IconButton
               label={collapsed ? 'Expand uploads' : 'Collapse uploads'}
@@ -89,13 +98,46 @@ export function UploadTray({
             >
               <ChevronDown className={cn('size-4 transition', collapsed && 'rotate-180')} />
             </IconButton>
-            <IconButton label="Dismiss uploads" className="size-8" onClick={onClear} disabled={isUploading}>
-              <X className="size-4" />
-            </IconButton>
+            {queue.length > 0 && (
+              <IconButton label="Dismiss uploads" className="size-8" onClick={onClear} disabled={isUploading}>
+                <X className="size-4" />
+              </IconButton>
+            )}
           </header>
 
           {!collapsed && (
             <ul className="max-h-64 divide-y divide-line overflow-y-auto border-t border-line">
+              {unfinished.length > 0 && (
+                <li className="bg-sunken/60 px-4 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="flex-1 text-xs text-ink-3">
+                      Cut short by a refresh or a closed tab. Choose the same files again to continue; what was already
+                      sent isn’t sent twice.
+                    </span>
+                    <Button variant="secondary" className="h-7 shrink-0 px-2.5 text-xs" onClick={onResume}>
+                      Resume…
+                    </Button>
+                  </div>
+                  <ul className="mt-2 divide-y divide-line">
+                    {unfinished.map((upload) => (
+                      <li key={upload.uploadId} className="flex items-center gap-2.5 py-1.5">
+                        <span className="size-2 shrink-0 rounded-full bg-folder-deep" aria-hidden="true" />
+                        <span className="flex-1 truncate text-sm text-ink" title={upload.key}>
+                          {upload.fileName}
+                        </span>
+                        <span className="font-mono text-xs text-ink-3">{formatBytes(upload.size, 1)}</span>
+                        <IconButton
+                          label={`Discard ${upload.fileName}`}
+                          className="-mr-1.5 size-6"
+                          onClick={() => onDiscardUnfinished?.(upload.uploadId)}
+                        >
+                          <X className="size-3.5" />
+                        </IconButton>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              )}
               {conflictCount > 1 && (
                 <li className="flex items-center gap-2 bg-sunken/60 px-4 py-2">
                   <span className="flex-1 text-xs text-ink-3">{conflictCount} files already exist</span>

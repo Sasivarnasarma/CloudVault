@@ -1,9 +1,10 @@
-import { Check, Copy, Download, FolderInput, Pencil, Trash2, X } from 'lucide-react';
+import { Check, Copy, Download, Eye, FolderInput, Pencil, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button, IconButton } from '../../components/common/Button';
 import type { TransferMode } from '../../lib/entries';
 import { categoryOf } from '../../lib/fileKind';
 import { formatBytes, formatDate } from '../../lib/formatters';
+import { canPreview } from '../../lib/previewKind';
 import { getObjectMetadata, requestPresignedDownload } from '../../services/objectService';
 import type { FileObject } from '../../types';
 import { FileIcon } from './FileIcon';
@@ -13,6 +14,7 @@ interface InspectorProps {
   bucket?: string;
   onClose: () => void;
   onDownload: (key: string, name: string) => void;
+  onPreview: (file: FileObject) => void;
   onDelete: (file: FileObject) => void;
   onTransfer: (file: FileObject, mode: TransferMode) => void;
 }
@@ -53,7 +55,7 @@ function Field({ label, children, mono }: { label: string; children: React.React
   );
 }
 
-export function Inspector({ file, bucket, onClose, onDownload, onDelete, onTransfer }: InspectorProps) {
+export function Inspector({ file, bucket, onClose, onDownload, onPreview, onDelete, onTransfer }: InspectorProps) {
   const [copied, setCopied] = useState(false);
   // The listing guesses content types from file names; the real value comes from storage.
   const [actualType, setActualType] = useState<{ key: string; type: string } | null>(null);
@@ -104,6 +106,12 @@ export function Inspector({ file, bucket, onClose, onDownload, onDelete, onTrans
         </p>
 
         <div className="mt-5 flex gap-2">
+          {canPreview(file) && (
+            <Button variant="secondary" className="flex-1" onClick={() => onPreview(file)}>
+              <Eye className="size-4" />
+              Preview
+            </Button>
+          )}
           <Button variant="primary" className="flex-1" onClick={() => onDownload(file.key, file.name)}>
             <Download className="size-4" />
             Download

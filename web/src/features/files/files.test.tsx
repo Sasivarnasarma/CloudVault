@@ -31,6 +31,7 @@ function renderBrowser(overrides: Partial<React.ComponentProps<typeof FileBrowse
     onOpenFolder: vi.fn(),
     onChoose: vi.fn(),
     onDownload: vi.fn(),
+    onPreview: vi.fn(),
     onDelete: vi.fn(),
     onTransfer: vi.fn(),
     onDownloadZip: vi.fn(),
@@ -108,14 +109,36 @@ describe('FileBrowser (grid)', () => {
     match.mockRestore();
   });
 
-  it('selects a file on click and downloads it on double click', async () => {
-    const { onChoose, onDownload } = renderBrowser();
+  it('selects a file on click and previews it on double click', async () => {
+    const { onChoose, onPreview, onDownload } = renderBrowser();
     await userEvent.click(screen.getByText('report.pdf'));
     expect(onChoose).toHaveBeenCalledWith('report.pdf');
-    expect(onDownload).not.toHaveBeenCalled();
+    expect(onPreview).not.toHaveBeenCalled();
 
     await userEvent.dblClick(screen.getByText('report.pdf'));
-    expect(onDownload).toHaveBeenCalledWith('report.pdf', 'report.pdf');
+    expect(onPreview).toHaveBeenCalledWith(report);
+    expect(onDownload).not.toHaveBeenCalled();
+  });
+
+  it('downloads a file the browser can’t show on double click, and offers Preview only for the others', async () => {
+    const archive = makeFile('backup.zip');
+    const { onDownload, onPreview } = renderBrowser({
+      entries: [{ type: 'file', id: archive.key, name: archive.name, file: archive }],
+    });
+    await userEvent.dblClick(screen.getByText('backup.zip'));
+    expect(onDownload).toHaveBeenCalledWith('backup.zip', 'backup.zip');
+    expect(onPreview).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for backup.zip' }));
+    expect(await screen.findByRole('menuitem', { name: 'Download' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Preview' })).not.toBeInTheDocument();
+  });
+
+  it('previews a file from its menu', async () => {
+    const { onPreview } = renderBrowser();
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for report.pdf' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Preview' }));
+    expect(onPreview).toHaveBeenCalledWith(report);
   });
 
   it('reflects the selected file for assistive tech', () => {
@@ -214,7 +237,13 @@ describe('Inspector', () => {
   });
 
   const renderInspector = (file = report) => {
-    const handlers = { onClose: vi.fn(), onDownload: vi.fn(), onDelete: vi.fn(), onTransfer: vi.fn() };
+    const handlers = {
+      onClose: vi.fn(),
+      onDownload: vi.fn(),
+      onPreview: vi.fn(),
+      onDelete: vi.fn(),
+      onTransfer: vi.fn(),
+    };
     render(<Inspector file={file} bucket="my-bucket" {...handlers} />);
     return handlers;
   };
@@ -264,7 +293,14 @@ describe('Inspector', () => {
   it('previews images through a presigned URL but not other files', async () => {
     const image = makeFile('photo.png', { content_type: 'image/png' });
     const { unmount } = render(
-      <Inspector file={image} onClose={() => {}} onDownload={() => {}} onDelete={() => {}} onTransfer={() => {}} />,
+      <Inspector
+        file={image}
+        onClose={() => {}}
+        onDownload={() => {}}
+        onPreview={() => {}}
+        onDelete={() => {}}
+        onTransfer={() => {}}
+      />,
     );
     const preview = await screen.findByRole('img', { name: 'photo.png' });
     expect(preview).toHaveAttribute('src', 'https://storage.test/img.png');

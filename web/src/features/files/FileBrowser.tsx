@@ -57,6 +57,7 @@ export function FileBrowser(props: FileBrowserProps) {
     onToggle: handlers.onToggleSelect,
     onExtend: handlers.onSelectRange,
     onOpenFolder: handlers.onOpenFolder,
+    onPreview: handlers.onPreview,
     onGoUp,
     onReachEnd,
   });

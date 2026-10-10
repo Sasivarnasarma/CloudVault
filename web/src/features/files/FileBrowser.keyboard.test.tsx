@@ -29,6 +29,7 @@ function makeHandlers() {
     onDragEnd: vi.fn(),
     onDropOnFolder: vi.fn(),
     onDownload: vi.fn(),
+    onPreview: vi.fn(),
     onDelete: vi.fn(),
     onTransfer: vi.fn(),
     onDownloadZip: vi.fn(),
@@ -161,7 +162,7 @@ describe.each(['list', 'grid'] as const)('keyboard navigation (%s view)', (view)
     expect(main('bar.txt')).toHaveFocus();
   });
 
-  it('opens a folder with Enter, and for a file selects it for its details without toggling it off', async () => {
+  it('opens a folder with Enter, and previews a file the browser can show', async () => {
     const { h } = renderBrowser(view);
     const user = userEvent.setup();
     focusItem('Reports');
@@ -170,7 +171,7 @@ describe.each(['list', 'grid'] as const)('keyboard navigation (%s view)', (view)
 
     focusItem('a.txt');
     await user.keyboard('{Enter}');
-    expect(h.onChoose).toHaveBeenLastCalledWith('a.txt');
+    expect(h.onPreview).toHaveBeenCalledWith(expect.objectContaining({ key: 'a.txt' }));
   });
 
   it('works when nothing is focused: the first key lands on the first item, End on the last', async () => {

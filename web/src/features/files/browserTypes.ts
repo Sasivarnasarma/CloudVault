@@ -1,4 +1,5 @@
 import type { Entry, SortDir, SortKey, TransferMode } from '../../lib/entries';
+import type { FileObject } from '../../types';
 
 export type ViewMode = 'grid' | 'list';
 
@@ -17,6 +18,8 @@ export interface EntryHandlers {
   /** Shift+click / Shift+arrows: select everything between the last chosen item and this one. */
   onSelectRange: (id: string, from?: string) => void;
   onDownload: (key: string, name: string) => void;
+  /** Look at a file without downloading it (only called for files `canPreview` accepts). */
+  onPreview: (file: FileObject) => void;
   /** Download folders, or several items together, as one zip file. */
   onDownloadZip: (entries: Entry[]) => void;
   onDelete: (entry: Entry) => void;

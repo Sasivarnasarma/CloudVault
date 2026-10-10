@@ -89,8 +89,28 @@ Configured in `api/.env` (see `api/.env.example`):
 | `CORS_ORIGINS`        | JSON list of allowed frontend origins        |
 
 Direct browser transfers also require a CORS rule on the **bucket** that allows
-`PUT` (uploads) and `GET` (downloading folders or a selection as a zip, which the
-browser builds from files it fetches itself) from your frontend origin.
+`PUT` (uploads) and `GET` (previews, and downloading folders or a selection as a zip,
+which the browser builds from files it fetches itself) from your frontend origin.
+
+### Previews
+
+Double-click a file, or press Enter on it, to look at it without downloading:
+images, video, audio, PDFs and text or code (the first 256 KB). Arrow keys or the
+buttons step through the other previewable files in the folder. The browser reads the
+file straight from storage with a temporary link, so what it can show depends on your
+browser and on the content type stored with the file. Files it cannot show are
+downloaded on double-click as before.
+
+### Resuming uploads
+
+Files over 64 MiB are sent in parts. If the page is refreshed or the tab is closed
+part-way, the upload is listed as **unfinished** in the upload panel. Choose the same
+file again with **Resume** and only the parts missing from storage are sent. The browser
+cannot keep a file across a refresh, so the file is matched by name, size and
+modified time, and the list of unfinished uploads is kept in the browser's local
+storage (a different browser or profile does not see it). An upload left for more than
+7 days is aborted. The bucket lifecycle rule for incomplete uploads described under
+Trash covers anything that is abandoned.
 
 ### Trash
 

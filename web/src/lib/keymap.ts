@@ -45,7 +45,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { group: 'Move around', label: 'First / last item', chords: ['Home', 'End'] },
   { group: 'Move around', label: 'Up / down a page', chords: ['PageUp', 'PageDown'] },
   { group: 'Move around', label: 'Jump to a name', chords: [], text: 'Type its first letters' },
-  { group: 'Move around', label: 'Open folder / show file details', chords: ['Enter'] },
+  { group: 'Move around', label: 'Open folder / preview file', chords: ['Enter'] },
   { group: 'Move around', label: 'Up one folder', chords: ['Backspace', 'alt+ArrowUp'], action: 'goUp' },
   { group: 'Move around', label: 'Search this folder', chords: ['/', 'mod+e'], action: 'focusSearch' },
 

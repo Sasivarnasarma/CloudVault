@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FocusEvent, type RefObject } from 'react';
 import type { Entry } from '../../lib/entries';
+import { canPreview } from '../../lib/previewKind';
+import type { FileObject } from '../../types';
 import {
   extendTypeAhead,
   isNavKey,
@@ -21,6 +23,8 @@ interface Options {
   /** Select everything between the anchor and this item (Shift+arrows); `from` is used if there is no anchor yet. */
   onExtend: (id: string, from?: string) => void;
   onOpenFolder: (prefix: string) => void;
+  /** Enter on a file the browser can show. */
+  onPreview: (file: FileObject) => void;
   onGoUp: () => void;
   /** The cursor reached the last loaded item: a chance to load the next page. */
   onReachEnd?: () => void;
@@ -66,7 +70,7 @@ function pageSize(root: HTMLElement, columns: number): number {
  * once and out again instead of through every row. Arrow keys / Home / End / PageUp / PageDown move
  * the cursor and select the item they land on; with Shift they extend the selection from where it
  * started, with Ctrl they move the cursor alone (Space or Ctrl+Space then selects or toggles it);
- * typing letters jumps to a name; Enter opens a folder or shows a file's details. The keys also work when nothing is focused (after clicking empty
+ * typing letters jumps to a name; Enter opens a folder, previews a file or (if it can't be shown) selects it. The keys also work when nothing is focused (after clicking empty
  * space or closing a dialog), but never while typing, in a dialog or while a menu is open.
  */
 export function useEntryNavigation(options: Options) {
@@ -110,6 +114,7 @@ export function useEntryNavigation(options: Options) {
         const entry = o.entries[current];
         e.preventDefault();
         if (entry.type === 'folder') o.onOpenFolder(entry.folder.prefix);
+        else if (canPreview(entry.file)) o.onPreview(entry.file);
         else o.onChoose(entry.id);
         return;
       }
