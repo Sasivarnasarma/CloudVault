@@ -9,7 +9,13 @@ const file = (name: string): Entry => ({ type: 'file', id: name, name, file: mak
 const folder = (name: string): Entry => ({ type: 'folder', id: `${name}/`, name, folder: makeFolder(name) });
 
 function setup(entries: Entry[], busy = false) {
-  const h = { onMove: vi.fn(), onCopy: vi.fn(), onDownloadZip: vi.fn(), onDelete: vi.fn(), onClear: vi.fn() };
+  const h = {
+    onMove: vi.fn(),
+    onCopy: vi.fn(),
+    onDownloadZip: vi.fn(),
+    onDelete: vi.fn(),
+    onClear: vi.fn(),
+  };
   render(<BulkBar entries={entries} busy={busy} {...h} />);
   return h;
 }

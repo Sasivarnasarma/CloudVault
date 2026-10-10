@@ -1,5 +1,7 @@
+import { ClipboardPaste, FolderPlus, FolderUp, RefreshCw, Upload } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { EntryContextMenu, type MenuItem } from '../components/common/EntryMenu';
 import { AppToaster } from '../components/layout/AppToaster';
 import { MobileDrawer } from '../components/layout/MobileDrawer';
 import { Sidebar } from '../components/layout/Sidebar';
@@ -32,6 +34,7 @@ import { UploadTray } from '../features/upload/UploadTray';
 import { useFolderUploads } from '../features/upload/useFolderUploads';
 import { useHealth } from '../hooks/useHealth';
 import { useTheme } from '../hooks/useTheme';
+import type { Entry } from '../lib/entries';
 import { folderLabel } from '../lib/paths';
 
 const ROOT_LABEL = 'All files';
@@ -67,6 +70,9 @@ export function FilesPage() {
     health.reload();
     refetch();
   };
+
+  /** What Cut / Copy in an item's menu applies to: the whole selection when the item is part of it. */
+  const targetsOf = (entry: Entry) => (selected.some((e) => e.id === entry.id) ? selected : [entry]);
 
   const uploads = useFolderUploads(currentPrefix, refetch);
   const deletes = useDeleteActions({ onDeleted: selection.remove, onRefresh: refetch });
@@ -159,6 +165,20 @@ export function FilesPage() {
     />
   );
 
+  /** The menu of the empty space around the items. */
+  const pageMenu: MenuItem[] = [
+    {
+      label: 'Paste',
+      icon: ClipboardPaste,
+      disabled: !clipboard.clipboard || !clipboard.canPaste,
+      onSelect: () => void clipboard.paste(),
+    },
+    { label: 'New folder', icon: FolderPlus, separatorBefore: true, onSelect: () => setFolderDialogOpen(true) },
+    { label: 'Upload files', icon: Upload, onSelect: uploads.openFilePicker },
+    { label: 'Upload folder', icon: FolderUp, onSelect: uploads.openFolderPicker },
+    { label: 'Refresh', icon: RefreshCw, separatorBefore: true, onSelect: refresh },
+  ];
+
   return (
     <div className="flex h-full bg-canvas text-ink">
       <aside className="hidden w-64 shrink-0 border-r border-line bg-surface lg:block">{sidebar}</aside>
@@ -191,61 +211,67 @@ export function FilesPage() {
           destination={folderLabel(currentPrefix, ROOT_LABEL)}
           canPaste={clipboard.canPaste}
           busy={transfers.transferring}
-          onPaste={clipboard.paste}
+          onPaste={() => clipboard.paste()}
           onClear={clipboard.clear}
         />
 
         <div className="relative flex min-h-0 flex-1">
-          <main className="min-w-0 flex-1 overflow-y-auto" aria-busy={listing.loading}>
-            <ListingState
-              error={listing.error}
-              loading={listing.loading}
-              empty={view.entries.length === 0}
-              filtered={view.filtered}
-              view={view.view}
-              onRetry={refetch}
-              onClearFilters={() => {
-                view.setSearch('');
-                view.setFilter('all');
-              }}
-            >
-              <FileBrowser
-                key={`${currentPrefix}|${view.view}`}
-                entries={view.entries}
+          <EntryContextMenu items={pageMenu}>
+            <main className="min-w-0 flex-1 overflow-y-auto" aria-busy={listing.loading}>
+              <ListingState
+                error={listing.error}
+                loading={listing.loading}
+                empty={view.entries.length === 0}
+                filtered={view.filtered}
                 view={view.view}
-                selection={selection.selected}
-                sort={view.sort}
-                onSortChange={view.changeSort}
-                onOpenFolder={navigateToFolder}
-                onChoose={selection.choose}
-                onToggleSelect={selection.toggle}
-                onSelectRange={selection.selectRange}
-                onSelectAll={selection.selectAll}
-                onClearSelection={selection.clear}
-                onGoUp={navigateUp}
-                onReachEnd={listing.hasMore ? listing.loadMore : undefined}
-                dragIds={drag.dragIds}
-                busyIds={transfers.movingIds}
-                cutIds={clipboard.cutIds}
-                onDragStart={drag.startDrag}
-                onDragEnd={drag.endDrag}
-                onDropOnFolder={drag.dropOn}
-                onDownload={downloadFile}
-                onDownloadZip={zip.download}
-                onDelete={(entry) => deletes.request([entry])}
-                onTransfer={(entry, mode) => transfers.openTransfer({ entry, mode })}
-              />
-            </ListingState>
-            {!listing.loading && !listing.error && (
-              <LoadMore
-                hasMore={listing.hasMore}
-                loading={listing.loadingMore}
-                error={listing.loadMoreError}
-                loadedCount={view.allEntries.length}
-                onLoadMore={listing.loadMore}
-              />
-            )}
-          </main>
+                onRetry={refetch}
+                onClearFilters={() => {
+                  view.setSearch('');
+                  view.setFilter('all');
+                }}
+              >
+                <FileBrowser
+                  key={`${currentPrefix}|${view.view}`}
+                  entries={view.entries}
+                  view={view.view}
+                  selection={selection.selected}
+                  sort={view.sort}
+                  onSortChange={view.changeSort}
+                  onOpenFolder={navigateToFolder}
+                  onChoose={selection.choose}
+                  onToggleSelect={selection.toggle}
+                  onSelectRange={selection.selectRange}
+                  onSelectAll={selection.selectAll}
+                  onClearSelection={selection.clear}
+                  onGoUp={navigateUp}
+                  onReachEnd={listing.hasMore ? listing.loadMore : undefined}
+                  dragIds={drag.dragIds}
+                  busyIds={transfers.movingIds}
+                  cutIds={clipboard.cutIds}
+                  onDragStart={drag.startDrag}
+                  onDragEnd={drag.endDrag}
+                  onDropOnFolder={drag.dropOn}
+                  onDownload={downloadFile}
+                  onDownloadZip={zip.download}
+                  onCut={(entry) => clipboard.cut(targetsOf(entry))}
+                  onCopy={(entry) => clipboard.copy(targetsOf(entry))}
+                  onPasteInto={(prefix) => void clipboard.paste(prefix)}
+                  canPasteInto={clipboard.canPasteInto}
+                  onDelete={(entry) => deletes.request([entry])}
+                  onTransfer={(entry, mode) => transfers.openTransfer({ entry, mode })}
+                />
+              </ListingState>
+              {!listing.loading && !listing.error && (
+                <LoadMore
+                  hasMore={listing.hasMore}
+                  loading={listing.loadingMore}
+                  error={listing.loadMoreError}
+                  loadedCount={view.allEntries.length}
+                  onLoadMore={listing.loadMore}
+                />
+              )}
+            </main>
+          </EntryContextMenu>
 
           <BulkBar
             entries={bulkEntries}

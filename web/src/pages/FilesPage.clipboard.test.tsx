@@ -1,5 +1,5 @@
 import { installPageMocks, renderPage } from './filesPage.testkit';
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { copyFolder } from '../services/folderService';
 import { ApiError } from '../services/http';
@@ -209,5 +209,99 @@ describe('FilesPage clipboard bar', () => {
     await user.click(await screen.findByRole('button', { name: 'Clear clipboard' }));
     await waitFor(() => expect(bar()).not.toBeInTheDocument());
     expect(item('notes.md').closest('[data-entry-id]')).not.toHaveClass('opacity-40');
+  });
+});
+
+describe('FilesPage clipboard from the right-click menu', () => {
+  const rowOf = (name: string) =>
+    document.querySelector(`[data-entry-main] [title="${name}"]`)!.closest('[data-entry-id]') as HTMLElement;
+  const rightClick = (target: HTMLElement) => fireEvent.contextMenu(target);
+  const menuItem = (name: string | RegExp) => screen.findByRole('menuitem', { name });
+
+  it('copies a file from its menu and pastes it into a folder from that folder’s menu', async () => {
+    const user = await renderPage();
+    rightClick(rowOf('notes.md'));
+    await user.click(await menuItem('Copy'));
+    expect(await screen.findByText('1 file copied')).toBeInTheDocument();
+
+    rightClick(rowOf('Reports'));
+    await user.click(await menuItem('Paste into folder'));
+    await waitFor(() => expect(copyObject).toHaveBeenCalledWith('notes.md', 'Reports/notes.md', false));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Clipboard' })).not.toBeInTheDocument());
+  });
+
+  it('cuts and moves with the same menus', async () => {
+    const user = await renderPage();
+    rightClick(rowOf('photo.png'));
+    await user.click(await menuItem('Cut'));
+    expect(await screen.findByText('1 file ready to move')).toBeInTheDocument();
+    expect(rowOf('photo.png')).toHaveClass('opacity-40');
+
+    rightClick(rowOf('Photos'));
+    await user.click(await menuItem('Paste into folder'));
+    await waitFor(() => expect(moveObject).toHaveBeenCalledWith('photo.png', 'Photos/photo.png', false));
+  });
+
+  it('applies to the whole selection when the item is part of it', async () => {
+    const user = await renderPage();
+    await user.click(screen.getByRole('checkbox', { name: 'Select notes.md' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Select photo.png' }));
+    rightClick(rowOf('notes.md'));
+    await user.click(await menuItem('Copy'));
+    expect(await screen.findByText('2 files copied')).toBeInTheDocument();
+  });
+
+  it('applies only to the item when it is not part of the selection', async () => {
+    const user = await renderPage();
+    await user.click(screen.getByRole('checkbox', { name: 'Select notes.md' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Select photo.png' }));
+    rightClick(rowOf('report.pdf'));
+    await user.click(await menuItem('Cut'));
+    expect(await screen.findByText('1 file ready to move')).toBeInTheDocument();
+  });
+
+  it('disables paste in the menu of the empty space when the cut items are already in this folder', async () => {
+    const user = await renderPage();
+    rightClick(rowOf('notes.md'));
+    await user.click(await menuItem('Cut'));
+    await screen.findByText('1 file ready to move');
+
+    rightClick(screen.getByRole('main'));
+    expect(await menuItem('Paste')).toHaveAttribute('data-disabled');
+    await user.keyboard('{Escape}');
+
+    rightClick(rowOf('Reports'));
+    expect(await menuItem('Paste into folder')).not.toHaveAttribute('data-disabled'); // another folder is fine
+  });
+
+  it('has a menu for the empty space with paste, new folder, upload and refresh', async () => {
+    const user = await renderPage();
+    rightClick(screen.getByRole('main'));
+    expect(await menuItem('Paste')).toHaveAttribute('data-disabled'); // nothing to paste yet
+    for (const name of ['New folder', 'Upload files', 'Upload folder', 'Refresh']) {
+      expect(screen.getByRole('menuitem', { name })).toBeInTheDocument();
+    }
+    await user.click(screen.getByRole('menuitem', { name: 'New folder' }));
+    expect(await screen.findByRole('dialog', { name: /folder/i })).toBeInTheDocument();
+  });
+
+  it('pastes into the folder being viewed from the menu of the empty space', async () => {
+    const user = await renderPage();
+    rightClick(rowOf('notes.md'));
+    await user.click(await menuItem('Copy'));
+    await user.dblClick(screen.getByText('Reports'));
+    await screen.findByText('q1.pdf');
+
+    rightClick(screen.getByRole('main'));
+    await user.click(await menuItem('Paste'));
+    await waitFor(() => expect(copyObject).toHaveBeenCalledWith('notes.md', 'Reports/notes.md', false));
+  });
+
+  it('opens only the item’s menu when an item is right-clicked', async () => {
+    await renderPage();
+    rightClick(rowOf('notes.md'));
+    await menuItem('Download');
+    expect(screen.getAllByRole('menu')).toHaveLength(1);
+    expect(screen.queryByRole('menuitem', { name: 'New folder' })).not.toBeInTheDocument();
   });
 });

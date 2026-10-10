@@ -21,6 +21,13 @@ export interface EntryHandlers {
   onDownloadZip: (entries: Entry[]) => void;
   onDelete: (entry: Entry) => void;
   onTransfer: (entry: Entry, mode: TransferMode) => void;
+  /** Cut / Copy from the menu: the entry, or the whole selection when it is part of one. */
+  onCut: (entry: Entry) => void;
+  onCopy: (entry: Entry) => void;
+  /** Paste what was cut or copied into a folder. */
+  onPasteInto: (folderPrefix: string) => void;
+  /** Whether pasting into that folder would do something. */
+  canPasteInto: (folderPrefix: string) => boolean;
 }
 
 /** Dragging entries onto folders to move them. */

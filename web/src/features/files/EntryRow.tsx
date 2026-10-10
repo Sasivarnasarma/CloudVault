@@ -19,6 +19,7 @@ export function EntryRow({ entry, index, selected, selection, handlers: h, drag,
         {...dnd.dragProps}
         {...dnd.dropHandlers}
         data-entry-id={entry.id}
+        onContextMenu={(e) => e.stopPropagation()}
         aria-selected={selected}
         style={{ animationDelay: `${Math.min(index * 12, 150)}ms` }}
         className={cn(

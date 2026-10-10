@@ -32,6 +32,10 @@ function makeHandlers() {
     onDelete: vi.fn(),
     onTransfer: vi.fn(),
     onDownloadZip: vi.fn(),
+    onCut: vi.fn(),
+    onCopy: vi.fn(),
+    onPasteInto: vi.fn(),
+    canPasteInto: vi.fn(() => false),
     onSortChange: vi.fn(),
   };
 }

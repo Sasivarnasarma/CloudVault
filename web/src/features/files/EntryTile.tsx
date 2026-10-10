@@ -22,6 +22,7 @@ export function EntryTile({ entry, index, selected, selection, handlers: h, drag
         {...dnd.dropHandlers}
         role="listitem"
         data-entry-id={entry.id}
+        onContextMenu={(e) => e.stopPropagation()}
         style={{ animationDelay: `${Math.min(index * 15, 200)}ms` }}
         className={cn(
           'group relative select-none rounded-2xl border bg-surface transition animate-rise [contain-intrinsic-size:auto_9rem] [content-visibility:auto]',

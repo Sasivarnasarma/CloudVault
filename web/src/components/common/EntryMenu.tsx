@@ -9,6 +9,8 @@ export interface MenuItem {
   icon: ComponentType<{ className?: string }>;
   onSelect: () => void;
   danger?: boolean;
+  /** Shown greyed out and cannot be chosen. */
+  disabled?: boolean;
   separatorBefore?: boolean;
 }
 
@@ -19,7 +21,7 @@ const contentClass =
 const itemClass = (danger?: boolean) =>
   cn(
     'flex cursor-pointer select-none items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm outline-none',
-    'data-[highlighted]:bg-sunken',
+    'data-[highlighted]:bg-sunken data-[disabled]:pointer-events-none data-[disabled]:opacity-40',
     danger ? 'text-danger data-[highlighted]:bg-danger-soft' : 'text-ink',
   );
 
@@ -34,7 +36,7 @@ export function EntryContextMenu({ items, children }: { items: MenuItem[]; child
           {items.map((item) => (
             <div key={item.label}>
               {item.separatorBefore && <ContextMenu.Separator className={separatorClass} />}
-              <ContextMenu.Item className={itemClass(item.danger)} onSelect={item.onSelect}>
+              <ContextMenu.Item className={itemClass(item.danger)} disabled={item.disabled} onSelect={item.onSelect}>
                 <item.icon className="size-4 text-current opacity-70" />
                 {item.label}
               </ContextMenu.Item>
@@ -73,7 +75,7 @@ export function EntryMoreMenu({
           {items.map((item) => (
             <div key={item.label}>
               {item.separatorBefore && <DropdownMenu.Separator className={separatorClass} />}
-              <DropdownMenu.Item className={itemClass(item.danger)} onSelect={item.onSelect}>
+              <DropdownMenu.Item className={itemClass(item.danger)} disabled={item.disabled} onSelect={item.onSelect}>
                 <item.icon className="size-4 text-current opacity-70" />
                 {item.label}
               </DropdownMenu.Item>

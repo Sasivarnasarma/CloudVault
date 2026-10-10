@@ -1,4 +1,16 @@
-import { Archive, Copy, Download, FolderInput, FolderOpen, Info, Pencil, Trash2 } from 'lucide-react';
+import {
+  Archive,
+  ClipboardPaste,
+  Copy,
+  CopyPlus,
+  Download,
+  FolderInput,
+  FolderOpen,
+  Info,
+  Pencil,
+  Scissors,
+  Trash2,
+} from 'lucide-react';
 import type { MouseEvent } from 'react';
 import type { MenuItem } from '../../components/common/EntryMenu';
 import type { Entry } from '../../lib/entries';
@@ -6,15 +18,26 @@ import type { EntryHandlers } from './browserTypes';
 
 /** The right-click / "more" menu of an entry. */
 export function menuFor(entry: Entry, h: EntryHandlers): MenuItem[] {
+  const clipboard: MenuItem[] = [
+    { label: 'Cut', icon: Scissors, separatorBefore: true, onSelect: () => h.onCut(entry) },
+    { label: 'Copy', icon: Copy, onSelect: () => h.onCopy(entry) },
+  ];
   const organize: MenuItem[] = [
     { label: 'Rename', icon: Pencil, separatorBefore: true, onSelect: () => h.onTransfer(entry, 'rename') },
     { label: 'Move to…', icon: FolderInput, onSelect: () => h.onTransfer(entry, 'move') },
-    { label: 'Copy to…', icon: Copy, onSelect: () => h.onTransfer(entry, 'copy') },
+    { label: 'Copy to…', icon: CopyPlus, onSelect: () => h.onTransfer(entry, 'copy') },
   ];
   if (entry.type === 'folder') {
     return [
       { label: 'Open', icon: FolderOpen, onSelect: () => h.onOpenFolder(entry.folder.prefix) },
       { label: 'Download as zip', icon: Archive, onSelect: () => h.onDownloadZip([entry]) },
+      ...clipboard,
+      {
+        label: 'Paste into folder',
+        icon: ClipboardPaste,
+        disabled: !h.canPasteInto(entry.folder.prefix),
+        onSelect: () => h.onPasteInto(entry.folder.prefix),
+      },
       ...organize,
       { label: 'Delete folder', icon: Trash2, danger: true, separatorBefore: true, onSelect: () => h.onDelete(entry) },
     ];
@@ -22,6 +45,7 @@ export function menuFor(entry: Entry, h: EntryHandlers): MenuItem[] {
   return [
     { label: 'Details', icon: Info, onSelect: () => h.onChoose(entry.id) },
     { label: 'Download', icon: Download, onSelect: () => h.onDownload(entry.file.key, entry.name) },
+    ...clipboard,
     ...organize,
     { label: 'Delete', icon: Trash2, danger: true, separatorBefore: true, onSelect: () => h.onDelete(entry) },
   ];

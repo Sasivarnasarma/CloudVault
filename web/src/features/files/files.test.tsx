@@ -34,6 +34,10 @@ function renderBrowser(overrides: Partial<React.ComponentProps<typeof FileBrowse
     onDelete: vi.fn(),
     onTransfer: vi.fn(),
     onDownloadZip: vi.fn(),
+    onCut: vi.fn(),
+    onCopy: vi.fn(),
+    onPasteInto: vi.fn(),
+    canPasteInto: vi.fn(() => false),
     onToggleSelect: vi.fn(),
     onSelectRange: vi.fn(),
     onSelectAll: vi.fn(),
@@ -386,5 +390,48 @@ describe('ListingState', () => {
     expect(screen.getByText('Nothing matches your filters')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
     expect(h.onClearFilters).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('FileBrowser menus: cut, copy and paste', () => {
+  const openMenu = async (name: string) => {
+    await userEvent.click(screen.getByRole('button', { name: `More actions for ${name}` }));
+  };
+
+  it('offers Cut and Copy for files and calls the handlers with the entry', async () => {
+    const { onCut, onCopy } = renderBrowser();
+    await openMenu('report.pdf');
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Cut' }));
+    expect(onCut).toHaveBeenCalledWith(expect.objectContaining({ id: 'report.pdf' }));
+
+    await openMenu('report.pdf');
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Copy' }));
+    expect(onCopy).toHaveBeenCalledWith(expect.objectContaining({ id: 'report.pdf' }));
+  });
+
+  it('does not offer to paste into a file', async () => {
+    renderBrowser();
+    await openMenu('report.pdf');
+    await screen.findByRole('menuitem', { name: 'Cut' });
+    expect(screen.queryByRole('menuitem', { name: 'Paste into folder' })).not.toBeInTheDocument();
+  });
+
+  it('offers to paste into a folder, only when that would do something', async () => {
+    const canPasteInto = vi.fn((prefix: string) => prefix === 'Reports/');
+    const { onPasteInto } = renderBrowser({ canPasteInto });
+    await openMenu('Reports');
+    const paste = await screen.findByRole('menuitem', { name: 'Paste into folder' });
+    expect(paste).not.toHaveAttribute('data-disabled');
+    await userEvent.click(paste);
+    expect(onPasteInto).toHaveBeenCalledWith('Reports/');
+  });
+
+  it('shows paste greyed out when there is nothing to paste', async () => {
+    const { onPasteInto } = renderBrowser();
+    await openMenu('Reports');
+    const paste = await screen.findByRole('menuitem', { name: 'Paste into folder' });
+    expect(paste).toHaveAttribute('data-disabled');
+    await userEvent.click(paste);
+    expect(onPasteInto).not.toHaveBeenCalled();
   });
 });

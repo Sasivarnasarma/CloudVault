@@ -20,17 +20,27 @@ interface Options {
 export function useClipboard({ selected, entries, currentPrefix, transfers }: Options) {
   const [clipboard, setClipboard] = useState<{ mode: 'copy' | 'cut'; entries: Entry[] } | null>(null);
 
-  const isHere = (entry: Entry) => parentPrefix(entryPath(entry)) === currentPrefix;
+  /** Is this entry directly inside the folder `destination`? */
+  const isIn = (entry: Entry, destination: string) => parentPrefix(entryPath(entry)) === destination;
 
-  /** Remember the selection. Returns false when there is nothing to copy (or the user is copying selected text). */
-  const put = (mode: 'copy' | 'cut'): false | void => {
-    if (selected.length === 0 || window.getSelection()?.toString()) return false;
-    setClipboard({ mode, entries: selected });
+  /**
+   * Remember items (by default the selection). Returns false when there is nothing to copy, or when
+   * the user is copying text they selected on the page.
+   */
+  const put = (mode: 'copy' | 'cut', items: Entry[] = selected): false | void => {
+    if (items.length === 0 || window.getSelection()?.toString()) return false;
+    setClipboard({ mode, entries: items });
   };
 
-  const paste = async () => {
+  /** False when pasting into this folder would do nothing: cut items that are already in it. */
+  const canPasteInto = (destination: string) =>
+    clipboard !== null && (clipboard.mode !== 'cut' || clipboard.entries.some((e) => !isIn(e, destination)));
+
+  /** Paste into a folder: the one being viewed unless another is given. */
+  const paste = async (destination: string = currentPrefix) => {
     if (!clipboard || transfers.transferring) return;
     const { mode, entries: source } = clipboard;
+    const isHere = (entry: Entry) => isIn(entry, destination);
 
     // Moving something to the folder it is already in does nothing.
     const items = mode === 'cut' ? source.filter((e) => !isHere(e)) : source;
@@ -40,7 +50,7 @@ export function useClipboard({ selected, entries, currentPrefix, transfers }: Op
     }
 
     // A copy pasted next to its original gets a new name instead of failing.
-    const taken = new Set(entries.map((e) => e.name));
+    const taken = new Set(destination === currentPrefix ? entries.map((e) => e.name) : []);
     const names = new Map<string, string>();
     if (mode === 'copy') {
       for (const entry of items.filter(isHere)) {
@@ -50,7 +60,7 @@ export function useClipboard({ selected, entries, currentPrefix, transfers }: Op
       }
     }
 
-    const results = await transfers.run(items, mode === 'cut' ? 'move' : 'copy', currentPrefix, (e) => names.get(e.id));
+    const results = await transfers.run(items, mode === 'cut' ? 'move' : 'copy', destination, (e) => names.get(e.id));
     if (results) {
       const failed = summarize(results).failed.map((r) => r.entry);
       setClipboard(failed.length > 0 ? { mode, entries: failed } : null);
@@ -61,10 +71,11 @@ export function useClipboard({ selected, entries, currentPrefix, transfers }: Op
     clipboard,
     /** Ids of the items waiting to be moved, to show them faded. */
     cutIds: clipboard?.mode === 'cut' ? clipboard.entries.map((e) => e.id) : undefined,
-    /** False when pasting would do nothing: cut items that are already in this folder. */
-    canPaste: clipboard?.mode !== 'cut' || clipboard.entries.some((e) => !isHere(e)),
-    copy: () => put('copy'),
-    cut: () => put('cut'),
+    /** False when pasting into the folder being viewed would do nothing. */
+    canPaste: clipboard?.mode !== 'cut' || canPasteInto(currentPrefix),
+    canPasteInto,
+    copy: (items?: Entry[]) => put('copy', items),
+    cut: (items?: Entry[]) => put('cut', items),
     paste,
     clear: () => setClipboard(null),
   };
