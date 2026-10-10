@@ -30,6 +30,7 @@ function renderBrowser(view: ViewMode, selected: string[] = []) {
     onDownload: vi.fn(),
     onDelete: vi.fn(),
     onTransfer: vi.fn(),
+    onDownloadZip: vi.fn(),
     onSortChange: vi.fn(),
   };
   render(

@@ -56,7 +56,12 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { group: 'Select', label: 'Clear selection', chords: ['Escape'], action: 'clearSelection' },
 
   { group: 'Work with items', label: 'Rename', chords: ['F2'], action: 'rename' },
-  { group: 'Work with items', label: 'Download', chords: ['mod+d'], action: 'download' },
+  {
+    group: 'Work with items',
+    label: 'Download (a folder or selection as a zip)',
+    chords: ['mod+d'],
+    action: 'download',
+  },
   { group: 'Work with items', label: 'Copy', chords: ['mod+c'], action: 'copy' },
   { group: 'Work with items', label: 'Cut', chords: ['mod+x'], action: 'cut' },
   { group: 'Work with items', label: 'Paste here', chords: ['mod+v'], action: 'paste' },

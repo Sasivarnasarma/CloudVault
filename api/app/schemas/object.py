@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 
+from app.core.limits import MAX_DOWNLOAD_URLS_PER_REQUEST
 from app.schemas.storage import (
     FolderItem,
     ObjectMetadata,
@@ -39,6 +40,19 @@ class PresignUploadRequest(BaseModel):
 # Responses share the storage-layer shapes.
 PresignUploadResponse = PresignedUploadData
 PresignDownloadResponse = PresignedDownloadData
+
+
+class PresignDownloadsRequest(BaseModel):
+    keys: list[str] = Field(
+        min_length=1,
+        max_length=MAX_DOWNLOAD_URLS_PER_REQUEST,
+        description="Object keys to get download links for",
+    )
+
+
+class PresignDownloadsResponse(BaseModel):
+    items: list[PresignedDownloadData] = Field(description="One link per key, in the order asked")
+    expires_in: int
 
 
 class DeleteObjectResponse(BaseModel):

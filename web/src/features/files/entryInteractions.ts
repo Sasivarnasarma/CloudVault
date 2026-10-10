@@ -1,4 +1,4 @@
-import { Copy, Download, FolderInput, FolderOpen, Info, Pencil, Trash2 } from 'lucide-react';
+import { Archive, Copy, Download, FolderInput, FolderOpen, Info, Pencil, Trash2 } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import type { MenuItem } from '../../components/common/EntryMenu';
 import type { Entry } from '../../lib/entries';
@@ -14,6 +14,7 @@ export function menuFor(entry: Entry, h: EntryHandlers): MenuItem[] {
   if (entry.type === 'folder') {
     return [
       { label: 'Open', icon: FolderOpen, onSelect: () => h.onOpenFolder(entry.folder.prefix) },
+      { label: 'Download as zip', icon: Archive, onSelect: () => h.onDownloadZip([entry]) },
       ...organize,
       { label: 'Delete folder', icon: Trash2, danger: true, separatorBefore: true, onSelect: () => h.onDelete(entry) },
     ];

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from app.schemas.storage import FolderItem
+from app.schemas.storage import FolderItem, TreeFile
 
 
 class CreateFolderRequest(BaseModel):
@@ -28,3 +28,10 @@ class DeleteFolderResponse(BaseModel):
     success: bool
     prefix: str
     deleted_count: int
+
+
+class FolderTreeResponse(BaseModel):
+    prefix: str
+    files: list[TreeFile] = Field(description="Every file under the folder, however deep")
+    empty_folders: list[str] = Field(description="Prefixes of folders with nothing inside them")
+    total_size: int

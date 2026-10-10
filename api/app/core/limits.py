@@ -1,4 +1,4 @@
-"""Size limits shared by upload routes."""
+"""Size and count limits shared by the upload and download routes."""
 
 MIB = 1024**2
 GIB = 1024**3
@@ -12,6 +12,10 @@ MAX_PARTS = 10_000
 MIN_PART_BYTES = 5 * MIB
 DEFAULT_PART_BYTES = 32 * MIB
 MAX_PART_URLS_PER_REQUEST = 100
+
+# Downloading a folder or a selection as one zip: the browser fetches the files itself.
+MAX_ARCHIVE_FILES = 10_000
+MAX_DOWNLOAD_URLS_PER_REQUEST = 100
 
 
 def choose_part_size(total_bytes: int) -> int:

@@ -73,6 +73,25 @@ export interface TransferFolderResponse extends TransferObjectResponse {
   item_count: number;
 }
 
+export interface TreeFile {
+  key: string;
+  size: number;
+}
+
+/** Everything inside a folder, however deep. */
+export interface FolderTreeResponse {
+  prefix: string;
+  files: TreeFile[];
+  /** Prefixes of folders with nothing inside them. */
+  empty_folders: string[];
+  total_size: number;
+}
+
+export interface PresignDownloadsResponse {
+  items: PresignDownloadResponse[];
+  expires_in: number;
+}
+
 export interface MultipartPlan {
   key: string;
   upload_id: string;

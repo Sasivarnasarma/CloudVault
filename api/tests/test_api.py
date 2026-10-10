@@ -9,12 +9,14 @@ from app.schemas.storage import (
     ObjectMetadata,
     PresignedDownloadData,
     PresignedUploadData,
+    TreeFile,
     UploadedPartInfo,
 )
 from app.services.storage.base import BaseStorageService
 from app.services.storage.exceptions import (
     ObjectExistsError,
     ObjectNotFoundError,
+    PayloadTooLargeError,
     StorageAccessError,
     StorageError,
     StorageUnavailableError,
@@ -134,6 +136,14 @@ class FakeStorage(BaseStorageService):
 
     def abort_multipart_upload(self, key, upload_id):
         self.calls.append(("mp_abort", f"{key}|{upload_id}"))
+
+    def list_folder_tree(self, prefix, max_files):
+        self.calls.append(("tree", f"{prefix}|{max_files}"))
+        if self.fail_with:
+            raise self.fail_with
+        return [TreeFile(key=prefix + "a.txt", size=3), TreeFile(key=prefix + "x/b.txt", size=4)], [
+            prefix + "empty/"
+        ]
 
     def generate_upload_url(self, key, content_type, expires_in=900, allow_overwrite=False):
         self.calls.append(("presign_upload", f"{key}:{allow_overwrite}"))
@@ -560,3 +570,51 @@ class TestMultipartRoutes:
         assert (
             client.post("/api/uploads/multipart/abort", json={"key": "big.bin"}).status_code == 422
         )
+
+
+class TestFolderTree:
+    def test_returns_every_file_with_sizes_and_empty_folders(self, client, storage):
+        res = client.get("/api/folders/tree", params={"prefix": "/photos//"})
+        assert res.status_code == 200
+        assert res.json() == {
+            "prefix": "photos/",
+            "files": [
+                {"key": "photos/a.txt", "size": 3},
+                {"key": "photos/x/b.txt", "size": 4},
+            ],
+            "empty_folders": ["photos/empty/"],
+            "total_size": 7,
+        }
+        assert ("tree", "photos/|10000") in storage.calls
+
+    @pytest.mark.parametrize("prefix", ["/", "", "..", "a/.."])
+    def test_rejects_the_bucket_root_and_traversal(self, client, prefix):
+        assert client.get("/api/folders/tree", params={"prefix": prefix}).status_code == 400
+
+    def test_too_many_files_is_413(self, client, storage):
+        storage.fail_with = PayloadTooLargeError("too many")
+        assert client.get("/api/folders/tree", params={"prefix": "big/"}).status_code == 413
+
+
+class TestPresignDownloads:
+    def test_returns_one_link_per_key_in_order(self, client):
+        res = client.post("/api/objects/presign-downloads", json={"keys": ["/b.txt", "a//c.txt"]})
+        assert res.status_code == 200
+        body = res.json()
+        assert [item["key"] for item in body["items"]] == ["b.txt", "a/c.txt"]
+        assert all(item["download_url"] == "https://example.test/get" for item in body["items"])
+        assert body["expires_in"] == 3600
+
+    @pytest.mark.parametrize("keys", [[], ["x"] * 101])
+    def test_needs_between_one_and_a_hundred_keys(self, client, keys):
+        assert client.post("/api/objects/presign-downloads", json={"keys": keys}).status_code == 422
+
+    @pytest.mark.parametrize("key", ["", "a/", "../x", "a\b"])
+    def test_rejects_invalid_keys(self, client, key):
+        res = client.post("/api/objects/presign-downloads", json={"keys": ["ok.txt", key]})
+        assert res.status_code == 400
+
+    def test_accepts_exactly_a_hundred_keys(self, client):
+        res = client.post("/api/objects/presign-downloads", json={"keys": ["k"] * 100})
+        assert res.status_code == 200
+        assert len(res.json()["items"]) == 100

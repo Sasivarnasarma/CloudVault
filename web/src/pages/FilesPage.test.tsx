@@ -1,10 +1,15 @@
 import { installPageMocks, renderPage, listMock, ROOT } from './filesPage.testkit';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFile, makeListing } from '../test/fixtures';
-import { createFolder, deleteFolder } from '../services/folderService';
-import { deleteObject, requestPresignedDownload, requestPresignedUpload } from '../services/objectService';
+import { createFolder, deleteFolder, fetchFolderTree } from '../services/folderService';
+import {
+  deleteObject,
+  requestPresignedDownload,
+  requestPresignedDownloads,
+  requestPresignedUpload,
+} from '../services/objectService';
 import { triggerBrowserDownload, uploadFileDirect } from '../services/transferService';
 import { FilesPage } from './FilesPage';
 import type { ObjectListResponse } from '../types';
@@ -231,5 +236,62 @@ describe('FilesPage large folders', () => {
     expect(listMock).toHaveBeenLastCalledWith('', { limit: 500, cursor: 'c1' });
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
     expect(screen.getByText('2 folders, 4 files')).toBeInTheDocument();
+  });
+});
+
+describe('FilesPage zip download', () => {
+  const stubPicker = () => {
+    const written: Uint8Array[] = [];
+    const picker = vi.fn(async (_options: { suggestedName: string }) => ({
+      createWritable: async () =>
+        new WritableStream<Uint8Array>({
+          write(chunk) {
+            written.push(chunk);
+          },
+        }),
+    }));
+    (window as unknown as { showSaveFilePicker: unknown }).showSaveFilePicker = picker;
+    vi.stubGlobal('fetch', async () => new Response('file-body'));
+    return { picker, size: () => written.reduce((sum, chunk) => sum + chunk.length, 0) };
+  };
+
+  afterEach(() => {
+    delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker;
+    vi.unstubAllGlobals();
+  });
+
+  it('zips a folder from its menu without opening it', async () => {
+    const { picker, size } = stubPicker();
+    const user = await renderPage();
+    await user.click(screen.getByRole('button', { name: 'More actions for Reports' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Download as zip' }));
+
+    await waitFor(() => expect(picker).toHaveBeenCalledWith(expect.objectContaining({ suggestedName: 'Reports.zip' })));
+    await waitFor(() => expect(size()).toBeGreaterThan(0));
+    expect(fetchFolderTree).toHaveBeenCalledWith('Reports/', expect.any(AbortSignal));
+    expect(requestPresignedDownloads).toHaveBeenCalledWith(['Reports/inside.txt'], expect.any(AbortSignal));
+    expect(window.location.search).toBe('');
+  });
+
+  it('zips several selected items from the bulk bar', async () => {
+    const { picker } = stubPicker();
+    const user = await renderPage();
+    await user.click(screen.getByRole('checkbox', { name: 'Select Reports' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Select notes.md' }));
+    await user.click(await screen.findByRole('button', { name: 'Download as zip' }));
+
+    await waitFor(() =>
+      expect(picker).toHaveBeenCalledWith(expect.objectContaining({ suggestedName: 'CloudVault download.zip' })),
+    );
+    await waitFor(() => expect(requestPresignedDownloads).toHaveBeenCalled());
+    const signed = vi.mocked(requestPresignedDownloads).mock.calls.flatMap(([keys]) => keys);
+    expect(signed.sort()).toEqual(['Reports/inside.txt', 'notes.md']);
+  });
+
+  it('does not offer a zip for a single file in its menu', async () => {
+    const user = await renderPage();
+    await user.click(screen.getByRole('button', { name: 'More actions for report.pdf' }));
+    await screen.findByRole('menuitem', { name: 'Download' });
+    expect(screen.queryByRole('menuitem', { name: 'Download as zip' })).not.toBeInTheDocument();
   });
 });

@@ -5,6 +5,8 @@ from app.schemas.object import (
     DeleteObjectResponse,
     ObjectListResponse,
     PresignDownloadResponse,
+    PresignDownloadsRequest,
+    PresignDownloadsResponse,
     PresignUploadRequest,
     PresignUploadResponse,
     TransferObjectRequest,
@@ -95,6 +97,19 @@ def generate_presigned_download_url(
     return storage.generate_download_url(
         key=clean_key, expires_in=DOWNLOAD_URL_TTL_SECONDS, filename=filename
     )
+
+
+@router.post("/presign-downloads", response_model=PresignDownloadsResponse)
+def generate_presigned_download_urls(
+    payload: PresignDownloadsRequest,
+    storage: BaseStorageService = Depends(get_storage_service),
+):
+    """Presigned GET URLs for several keys at once (used to zip a folder or a selection)."""
+    items = [
+        storage.generate_download_url(key=normalize_key(key), expires_in=DOWNLOAD_URL_TTL_SECONDS)
+        for key in payload.keys
+    ]
+    return PresignDownloadsResponse(items=items, expires_in=DOWNLOAD_URL_TTL_SECONDS)
 
 
 @router.delete("", response_model=DeleteObjectResponse)

@@ -33,6 +33,7 @@ function renderBrowser(overrides: Partial<React.ComponentProps<typeof FileBrowse
     onDownload: vi.fn(),
     onDelete: vi.fn(),
     onTransfer: vi.fn(),
+    onDownloadZip: vi.fn(),
     onToggleSelect: vi.fn(),
     onSelectRange: vi.fn(),
     onSelectAll: vi.fn(),

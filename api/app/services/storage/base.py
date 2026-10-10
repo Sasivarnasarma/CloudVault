@@ -6,6 +6,7 @@ from app.schemas.storage import (
     ObjectMetadata,
     PresignedDownloadData,
     PresignedUploadData,
+    TreeFile,
     UploadedPartInfo,
 )
 
@@ -54,6 +55,13 @@ class BaseStorageService(ABC):
         """Recursively delete all objects under a folder prefix.
 
         Refuses to run on an empty prefix (the bucket root).
+        """
+
+    @abstractmethod
+    def list_folder_tree(self, prefix: str, max_files: int) -> tuple[list[TreeFile], list[str]]:
+        """Every file under a folder, however deep, and the folders that have nothing inside.
+
+        Raises PayloadTooLargeError if there are more than `max_files` files.
         """
 
     # --- objects --------------------------------------------------------------------

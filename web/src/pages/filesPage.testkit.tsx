@@ -14,6 +14,7 @@ vi.mock('../services/objectService', () => ({
   deleteObject: vi.fn(),
   getObjectMetadata: vi.fn(),
   requestPresignedDownload: vi.fn(),
+  requestPresignedDownloads: vi.fn(),
   requestPresignedUpload: vi.fn(),
 }));
 vi.mock('../services/folderService', () => ({
@@ -21,6 +22,7 @@ vi.mock('../services/folderService', () => ({
   deleteFolder: vi.fn(),
   copyFolder: vi.fn(),
   moveFolder: vi.fn(),
+  fetchFolderTree: vi.fn(),
 }));
 vi.mock('../services/transferService', async (importActual) => ({
   ...(await importActual<typeof import('../services/transferService')>()),
@@ -29,7 +31,7 @@ vi.mock('../services/transferService', async (importActual) => ({
   triggerBrowserDownload: vi.fn(),
 }));
 
-import { copyFolder, createFolder, deleteFolder, moveFolder } from '../services/folderService';
+import { copyFolder, createFolder, deleteFolder, fetchFolderTree, moveFolder } from '../services/folderService';
 import { fetchHealthStatus } from '../services/healthService';
 import {
   copyObject,
@@ -38,6 +40,7 @@ import {
   listObjects,
   moveObject,
   requestPresignedDownload,
+  requestPresignedDownloads,
   requestPresignedUpload,
 } from '../services/objectService';
 import { triggerBrowserDownload, uploadFileDirect } from '../services/transferService';
@@ -74,6 +77,20 @@ export function installPageMocks() {
   vi.mocked(moveFolder).mockReset().mockResolvedValue({ success: true, source: '', destination: '', item_count: 2 });
   vi.mocked(copyFolder).mockReset().mockResolvedValue({ success: true, source: '', destination: '', item_count: 2 });
   vi.mocked(createFolder).mockReset().mockResolvedValue({ success: true, folder: REPORTS });
+  vi.mocked(fetchFolderTree)
+    .mockReset()
+    .mockImplementation(async (prefix) => ({
+      prefix,
+      files: [{ key: `${prefix}inside.txt`, size: 6 }],
+      empty_folders: [],
+      total_size: 6,
+    }));
+  vi.mocked(requestPresignedDownloads)
+    .mockReset()
+    .mockImplementation(async (keys) => ({
+      expires_in: 3600,
+      items: keys.map((key) => ({ key, download_url: `https://storage.test/${key}`, expires_in: 3600 })),
+    }));
   vi.mocked(getObjectMetadata)
     .mockReset()
     .mockImplementation(async (key) => makeFile(key));

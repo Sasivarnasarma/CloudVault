@@ -88,8 +88,9 @@ Configured in `api/.env` (see `api/.env.example`):
 | `MAX_UPLOAD_BYTES`    | Optional upload size limit (default 5 GiB)   |
 | `CORS_ORIGINS`        | JSON list of allowed frontend origins        |
 
-Direct browser uploads also require a CORS rule on the **bucket** that allows
-`PUT`/`GET` from your frontend origin.
+Direct browser transfers also require a CORS rule on the **bucket** that allows
+`PUT` (uploads) and `GET` (downloading folders or a selection as a zip, which the
+browser builds from files it fetches itself) from your frontend origin.
 
 ## Project layout
 

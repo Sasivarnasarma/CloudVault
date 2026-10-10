@@ -3,6 +3,7 @@ import type {
   FileObject,
   ObjectListResponse,
   PresignDownloadResponse,
+  PresignDownloadsResponse,
   PresignUploadResponse,
   TransferObjectResponse,
 } from '../types';
@@ -57,4 +58,13 @@ export function requestPresignedDownload(key: string, filename?: string): Promis
   const params = new URLSearchParams({ key });
   if (filename) params.set('filename', filename);
   return request(`/api/objects/presign-download?${params}`, undefined, 'Failed to request download URL');
+}
+
+/** Download links for several files at once (at most 100 per request). */
+export function requestPresignedDownloads(keys: string[], signal?: AbortSignal): Promise<PresignDownloadsResponse> {
+  return request(
+    '/api/objects/presign-downloads',
+    { ...jsonBody({ keys }), signal },
+    'Failed to request download URLs',
+  );
 }

@@ -18,6 +18,13 @@ class FolderItem(BaseModel):
     prefix: str
 
 
+class TreeFile(BaseModel):
+    """One file somewhere under a folder: its full key and size."""
+
+    key: str
+    size: int
+
+
 class PresignedUploadData(BaseModel):
     upload_url: str
     method: str = "PUT"

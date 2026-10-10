@@ -2,6 +2,7 @@ import { installPageMocks, renderPage, listMock } from './filesPage.testkit';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchFolderTree } from '../services/folderService';
 import { deleteObject, requestPresignedDownload } from '../services/objectService';
 import { triggerBrowserDownload } from '../services/transferService';
 import { FilesPage } from './FilesPage';
@@ -104,11 +105,16 @@ describe('FilesPage keyboard shortcuts', () => {
     expect(screen.queryByRole('dialog', { name: /Rename/ })).not.toBeInTheDocument();
   });
 
-  it('downloads the selected file with Ctrl+D but not a folder', async () => {
+  it('downloads the selected file with Ctrl+D, and a folder as a zip', async () => {
+    const picker = vi.fn(async () => ({ createWritable: async () => new WritableStream() }));
+    (window as unknown as { showSaveFilePicker: unknown }).showSaveFilePicker = picker;
     const user = await renderPage();
     await select(user, 'Reports');
     await user.keyboard('{Control>}d{/Control}');
+    await waitFor(() => expect(fetchFolderTree).toHaveBeenCalledWith('Reports/', expect.any(AbortSignal)));
+    expect(picker).toHaveBeenCalledWith(expect.objectContaining({ suggestedName: 'Reports.zip' }));
     expect(requestPresignedDownload).not.toHaveBeenCalled();
+    delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker;
 
     await select(user, 'report.pdf');
     await user.keyboard('{Control>}d{/Control}');

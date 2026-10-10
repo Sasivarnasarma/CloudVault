@@ -24,6 +24,7 @@ import { useFolderView } from '../features/files/useFolderView';
 import { useObjects } from '../features/files/useObjects';
 import { useSelection } from '../features/files/useSelection';
 import { useTransfers } from '../features/files/useTransfers';
+import { useZipDownload } from '../features/files/useZipDownload';
 import { CreateFolderModal } from '../features/folders/CreateFolderModal';
 import { DropOverlay } from '../features/upload/DropOverlay';
 import { UploadPickers } from '../features/upload/UploadPickers';
@@ -71,6 +72,7 @@ export function FilesPage() {
   const deletes = useDeleteActions({ onDeleted: selection.remove, onRefresh: refetch });
   const transfers = useTransfers({ selection, onRefresh: refetch });
   const drag = useDragMove({ entries: view.allEntries, currentPrefix, run: transfers.run });
+  const zip = useZipDownload();
   const clipboard = useClipboard({ selected, entries: view.allEntries, currentPrefix, transfers });
 
   // Keyboard shortcuts (the full list is in lib/keymap.ts). The arrow keys, Enter, Space and
@@ -104,8 +106,10 @@ export function FilesPage() {
       transfers.openTransfer({ entry: onlySelected, mode: 'rename' });
     },
     download: () => {
-      if (onlySelected?.type !== 'file') return false;
-      void downloadFile(onlySelected.file.key, onlySelected.name);
+      if (selected.length === 0) return false;
+      // One file downloads as it is; folders and several items come as a zip.
+      if (onlySelected?.type === 'file') void downloadFile(onlySelected.file.key, onlySelected.name);
+      else void zip.download(selected);
     },
     contextMenu: () => {
       // Open the same menu a right-click would, next to the item that has the keyboard focus.
@@ -227,6 +231,7 @@ export function FilesPage() {
                 onDragEnd={drag.endDrag}
                 onDropOnFolder={drag.dropOn}
                 onDownload={downloadFile}
+                onDownloadZip={zip.download}
                 onDelete={(entry) => deletes.request([entry])}
                 onTransfer={(entry, mode) => transfers.openTransfer({ entry, mode })}
               />
@@ -247,6 +252,7 @@ export function FilesPage() {
             busy={deletes.deleting}
             onMove={() => transfers.openBulkTransfer({ mode: 'move', entries: bulkEntries })}
             onCopy={() => transfers.openBulkTransfer({ mode: 'copy', entries: bulkEntries })}
+            onDownloadZip={() => zip.download(bulkEntries)}
             onDelete={() => deletes.request(bulkEntries)}
             onClear={selection.clear}
           />

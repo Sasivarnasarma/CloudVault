@@ -17,6 +17,8 @@ export interface EntryHandlers {
   /** Shift+click / Shift+arrows: select everything between the last chosen item and this one. */
   onSelectRange: (id: string, from?: string) => void;
   onDownload: (key: string, name: string) => void;
+  /** Download folders, or several items together, as one zip file. */
+  onDownloadZip: (entries: Entry[]) => void;
   onDelete: (entry: Entry) => void;
   onTransfer: (entry: Entry, mode: TransferMode) => void;
 }

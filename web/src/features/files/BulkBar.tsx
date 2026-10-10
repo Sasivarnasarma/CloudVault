@@ -1,4 +1,4 @@
-import { Copy, FolderInput, Trash2, X } from 'lucide-react';
+import { Archive, Copy, FolderInput, Trash2, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Button, IconButton } from '../../components/common/Button';
 import type { Entry } from '../../lib/entries';
@@ -9,12 +9,13 @@ interface BulkBarProps {
   busy?: boolean;
   onMove: () => void;
   onCopy: () => void;
+  onDownloadZip: () => void;
   onDelete: () => void;
   onClear: () => void;
 }
 
 /** Floating action bar shown while several items (or any folder) are selected. */
-export function BulkBar({ entries, busy, onMove, onCopy, onDelete, onClear }: BulkBarProps) {
+export function BulkBar({ entries, busy, onMove, onCopy, onDownloadZip, onDelete, onClear }: BulkBarProps) {
   return (
     <AnimatePresence>
       {entries.length > 0 && (
@@ -38,6 +39,10 @@ export function BulkBar({ entries, busy, onMove, onCopy, onDelete, onClear }: Bu
           <Button variant="ghost" onClick={onCopy} disabled={busy}>
             <Copy className="size-4" />
             <span className="max-sm:sr-only">Copy to…</span>
+          </Button>
+          <Button variant="ghost" onClick={onDownloadZip} disabled={busy}>
+            <Archive className="size-4" />
+            <span className="max-sm:sr-only">Download as zip</span>
           </Button>
           <Button
             variant="ghost"

@@ -12,6 +12,7 @@ from app.schemas.storage import (
     ObjectMetadata,
     PresignedDownloadData,
     PresignedUploadData,
+    TreeFile,
     UploadedPartInfo,
 )
 from app.services.storage.base import BaseStorageService
@@ -19,6 +20,7 @@ from app.services.storage.exceptions import (
     InvalidKeyError,
     ObjectExistsError,
     ObjectNotFoundError,
+    PayloadTooLargeError,
     StorageError,
     UploadIncompleteError,
 )
@@ -231,6 +233,35 @@ class S3StorageService(BaseStorageService):
                 f"Deleted {deleted_count} items, but {len(failed)} could not be deleted"
             )
         return deleted_count
+
+    def list_folder_tree(self, prefix: str, max_files: int) -> tuple[list[TreeFile], list[str]]:
+        norm_prefix = normalize_folder(prefix)
+        files: list[TreeFile] = []
+        empty_folders: list[str] = []
+        previous_marker: str | None = None
+
+        with storage_errors("listing folder contents"):
+            paginator = self.client.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=self.bucket, Prefix=norm_prefix):
+                for obj in page.get("Contents", []):
+                    key = obj["Key"]
+                    # Keys come back in order, so a folder marker is empty when the very next key is
+                    # not inside it.
+                    if previous_marker and not key.startswith(previous_marker):
+                        empty_folders.append(previous_marker)
+                    previous_marker = None
+                    if key.endswith("/"):
+                        if key != norm_prefix:
+                            previous_marker = key
+                        continue
+                    files.append(TreeFile(key=key, size=obj.get("Size", 0)))
+                    if len(files) > max_files:
+                        raise PayloadTooLargeError(
+                            f"This folder has more than {max_files:,} files: too many to zip"
+                        )
+        if previous_marker:
+            empty_folders.append(previous_marker)
+        return files, empty_folders
 
     # --- objects --------------------------------------------------------------------
 

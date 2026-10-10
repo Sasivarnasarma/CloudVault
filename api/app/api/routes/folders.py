@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, Query
 
+from app.core.limits import MAX_ARCHIVE_FILES
 from app.schemas.folder import (
     CreateFolderRequest,
     CreateFolderResponse,
     DeleteFolderResponse,
+    FolderTreeResponse,
     TransferFolderRequest,
     TransferFolderResponse,
 )
@@ -58,4 +60,20 @@ def move_folder(
     count = storage.move_folder(source, destination)
     return TransferFolderResponse(
         success=True, source=source, destination=destination, item_count=count
+    )
+
+
+@router.get("/tree", response_model=FolderTreeResponse)
+def get_folder_tree(
+    prefix: str = Query(..., description="Folder to list, with everything inside it"),
+    storage: BaseStorageService = Depends(get_storage_service),
+):
+    """Every file under a folder with its size, so the browser can zip the folder itself."""
+    clean_prefix = normalize_folder(prefix)
+    files, empty_folders = storage.list_folder_tree(clean_prefix, MAX_ARCHIVE_FILES)
+    return FolderTreeResponse(
+        prefix=clean_prefix,
+        files=files,
+        empty_folders=empty_folders,
+        total_size=sum(f.size for f in files),
     )
