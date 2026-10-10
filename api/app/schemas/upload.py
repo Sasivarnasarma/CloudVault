@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 from pydantic import BaseModel, Field
 
 from app.core.limits import MAX_PART_URLS_PER_REQUEST, MAX_PARTS
@@ -16,7 +14,9 @@ class UploadRef(BaseModel):
 class MultipartCreateRequest(BaseModel):
     key: str
     size: int = Field(gt=0, description="Total file size in bytes")
-    content_type: str = Field(default="application/octet-stream", pattern=CONTENT_TYPE_PATTERN, max_length=255)
+    content_type: str = Field(
+        default="application/octet-stream", pattern=CONTENT_TYPE_PATTERN, max_length=255
+    )
     overwrite: bool = False
 
 
@@ -28,7 +28,7 @@ class MultipartCreateResponse(BaseModel):
 
 
 class PartUrlsRequest(UploadRef):
-    part_numbers: List[int] = Field(min_length=1, max_length=MAX_PART_URLS_PER_REQUEST)
+    part_numbers: list[int] = Field(min_length=1, max_length=MAX_PART_URLS_PER_REQUEST)
 
 
 class PartUrl(BaseModel):
@@ -37,7 +37,7 @@ class PartUrl(BaseModel):
 
 
 class PartUrlsResponse(BaseModel):
-    parts: List[PartUrl]
+    parts: list[PartUrl]
     expires_in: int
 
 
@@ -48,7 +48,7 @@ class UploadedPart(BaseModel):
 
 
 class UploadedPartsResponse(BaseModel):
-    parts: List[UploadedPart]
+    parts: list[UploadedPart]
 
 
 class MultipartCompleteRequest(UploadRef):
@@ -58,7 +58,7 @@ class MultipartCompleteRequest(UploadRef):
 class MultipartCompleteResponse(BaseModel):
     success: bool
     key: str
-    etag: Optional[str] = None
+    etag: str | None = None
 
 
 class MultipartAbortResponse(BaseModel):

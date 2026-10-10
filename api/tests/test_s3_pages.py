@@ -6,7 +6,7 @@ from botocore.stub import Stubber
 from app.services.storage.exceptions import InvalidKeyError
 from app.services.storage.s3 import S3StorageService
 
-NOW = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+NOW = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
 
 
 @pytest.fixture
@@ -39,8 +39,17 @@ def test_next_page_passes_the_cursor_and_ends_without_one(service):
     with Stubber(service.client) as stub:
         stub.add_response(
             "list_objects_v2",
-            {"IsTruncated": False, "Contents": [{"Key": "b.txt", "Size": 1, "LastModified": NOW, "ETag": '"b"'}]},
-            {"Bucket": "test-bucket", "Prefix": "", "Delimiter": "/", "MaxKeys": 100, "ContinuationToken": "tok-1"},
+            {
+                "IsTruncated": False,
+                "Contents": [{"Key": "b.txt", "Size": 1, "LastModified": NOW, "ETag": '"b"'}],
+            },
+            {
+                "Bucket": "test-bucket",
+                "Prefix": "",
+                "Delimiter": "/",
+                "MaxKeys": 100,
+                "ContinuationToken": "tok-1",
+            },
         )
         folders, objects, cursor = service.list_page("", limit=100, cursor="tok-1")
     assert folders == [] and [o.name for o in objects] == ["b.txt"]
@@ -59,7 +68,9 @@ def test_a_server_error_with_a_cursor_is_still_a_storage_failure(service):
     from app.services.storage.exceptions import StorageError
 
     with Stubber(service.client) as stub:
-        stub.add_client_error("list_objects_v2", service_error_code="InternalError", http_status_code=500)
+        stub.add_client_error(
+            "list_objects_v2", service_error_code="InternalError", http_status_code=500
+        )
         with pytest.raises(StorageError) as raised:
             service.list_page("", limit=10, cursor="tok")
     assert not isinstance(raised.value, InvalidKeyError)

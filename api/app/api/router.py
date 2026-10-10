@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+
 from app.api.routes import folders, health, objects, uploads
 
 api_router = APIRouter(prefix="/api")

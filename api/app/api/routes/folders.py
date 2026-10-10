@@ -43,7 +43,9 @@ def copy_folder(
     """Recursively copy a folder to a new path. Never overwrites existing content."""
     source, destination = normalize_folder(payload.source), normalize_folder(payload.destination)
     count = storage.copy_folder(source, destination)
-    return TransferFolderResponse(success=True, source=source, destination=destination, item_count=count)
+    return TransferFolderResponse(
+        success=True, source=source, destination=destination, item_count=count
+    )
 
 
 @router.post("/move", response_model=TransferFolderResponse)
@@ -54,4 +56,6 @@ def move_folder(
     """Move or rename a folder. Never overwrites existing content."""
     source, destination = normalize_folder(payload.source), normalize_folder(payload.destination)
     count = storage.move_folder(source, destination)
-    return TransferFolderResponse(success=True, source=source, destination=destination, item_count=count)
+    return TransferFolderResponse(
+        success=True, source=source, destination=destination, item_count=count
+    )

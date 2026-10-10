@@ -5,7 +5,7 @@ from botocore.stub import Stubber
 
 from app.services.storage.s3 import S3StorageService
 
-NOW = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+NOW = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
 
 
 @pytest.fixture

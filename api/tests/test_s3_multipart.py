@@ -31,7 +31,9 @@ class TestCreate:
                 {"UploadId": "u-1"},
                 {"Bucket": BUCKET, "Key": "big/file.bin", "ContentType": "application/zip"},
             )
-            info = service.create_multipart_upload("/big//file.bin", "application/zip", 70 * 1024**2)
+            info = service.create_multipart_upload(
+                "/big//file.bin", "application/zip", 70 * 1024**2
+            )
         assert info.upload_id == "u-1"
         assert info.part_size == DEFAULT_PART_BYTES
         assert info.part_count == 3  # 70 MiB in 32 MiB parts
@@ -48,7 +50,12 @@ class TestCreate:
                 {"UploadId": "u-2"},
                 {"Bucket": BUCKET, "Key": "a.bin", "ContentType": "application/octet-stream"},
             )
-            assert service.create_multipart_upload("a.bin", "application/octet-stream", 100, True).upload_id == "u-2"
+            assert (
+                service.create_multipart_upload(
+                    "a.bin", "application/octet-stream", 100, True
+                ).upload_id
+                == "u-2"
+            )
 
     def test_invalid_keys_are_rejected_before_any_request(self, service):
         with pytest.raises(InvalidKeyError):
@@ -86,7 +93,11 @@ class TestListAndComplete:
 
     def test_complete_uses_etags_from_storage(self, service):
         with Stubber(service.client) as stub:
-            stub.add_response("list_parts", parts_response(1, 2), {"Bucket": BUCKET, "Key": "big.bin", "UploadId": "u-1"})
+            stub.add_response(
+                "list_parts",
+                parts_response(1, 2),
+                {"Bucket": BUCKET, "Key": "big.bin", "UploadId": "u-1"},
+            )
             stub.add_response(
                 "complete_multipart_upload",
                 {"ETag": '"final-2"'},
@@ -94,7 +105,12 @@ class TestListAndComplete:
                     "Bucket": BUCKET,
                     "Key": "big.bin",
                     "UploadId": "u-1",
-                    "MultipartUpload": {"Parts": [{"ETag": '"etag1"', "PartNumber": 1}, {"ETag": '"etag2"', "PartNumber": 2}]},
+                    "MultipartUpload": {
+                        "Parts": [
+                            {"ETag": '"etag1"', "PartNumber": 1},
+                            {"ETag": '"etag2"', "PartNumber": 2},
+                        ]
+                    },
                 },
             )
             assert service.complete_multipart_upload("big.bin", "u-1", 2) == "final-2"
@@ -102,27 +118,41 @@ class TestListAndComplete:
 
     def test_complete_names_the_missing_parts_without_calling_storage_to_finish(self, service):
         with Stubber(service.client) as stub:
-            stub.add_response("list_parts", parts_response(1, 3), {"Bucket": BUCKET, "Key": "big.bin", "UploadId": "u-1"})
+            stub.add_response(
+                "list_parts",
+                parts_response(1, 3),
+                {"Bucket": BUCKET, "Key": "big.bin", "UploadId": "u-1"},
+            )
             with pytest.raises(UploadIncompleteError, match=r"1 part\(s\) are missing \(e.g. 2\)"):
                 service.complete_multipart_upload("big.bin", "u-1", 3)
             stub.assert_no_pending_responses()
 
     def test_unknown_uploads_are_not_found(self, service):
         with Stubber(service.client) as stub:
-            stub.add_client_error("list_parts", service_error_code="NoSuchUpload", http_status_code=404)
+            stub.add_client_error(
+                "list_parts", service_error_code="NoSuchUpload", http_status_code=404
+            )
             with pytest.raises(ObjectNotFoundError, match="upload was not found"):
                 service.list_uploaded_parts("big.bin", "gone")
 
     def test_storage_rejecting_a_part_is_reported_as_incomplete(self, service):
         with Stubber(service.client) as stub:
-            stub.add_response("list_parts", parts_response(1), {"Bucket": BUCKET, "Key": "big.bin", "UploadId": "u-1"})
-            stub.add_client_error("complete_multipart_upload", service_error_code="InvalidPart", http_status_code=400)
+            stub.add_response(
+                "list_parts",
+                parts_response(1),
+                {"Bucket": BUCKET, "Key": "big.bin", "UploadId": "u-1"},
+            )
+            stub.add_client_error(
+                "complete_multipart_upload", service_error_code="InvalidPart", http_status_code=400
+            )
             with pytest.raises(UploadIncompleteError):
                 service.complete_multipart_upload("big.bin", "u-1", 1)
 
 
 def test_abort_discards_the_upload(service):
     with Stubber(service.client) as stub:
-        stub.add_response("abort_multipart_upload", {}, {"Bucket": BUCKET, "Key": "big.bin", "UploadId": "u-1"})
+        stub.add_response(
+            "abort_multipart_upload", {}, {"Bucket": BUCKET, "Key": "big.bin", "UploadId": "u-1"}
+        )
         service.abort_multipart_upload("/big.bin", "u-1")
         stub.assert_no_pending_responses()

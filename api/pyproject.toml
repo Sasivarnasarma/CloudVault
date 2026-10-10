@@ -17,7 +17,27 @@ dependencies = [
 [tool.fastapi]
 entrypoint = "app.main:app"
 
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, import order, modern syntax, likely bugs
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI reads Query(...) and Depends(...) defaults from the signature.
+"app/api/routes/*.py" = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    # Starlette's TestClient prefers httpx2; FastAPI's own test client still uses httpx.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "ruff>=0.17.0",
 ]

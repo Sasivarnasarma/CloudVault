@@ -1,11 +1,10 @@
 from pydantic import BaseModel, Field
+
 from app.schemas.storage import FolderItem
 
 
 class CreateFolderRequest(BaseModel):
-    path: str = Field(
-        description="Target folder path to create, e.g. documents/projects"
-    )
+    path: str = Field(description="Target folder path to create, e.g. documents/projects")
 
 
 class CreateFolderResponse(BaseModel):

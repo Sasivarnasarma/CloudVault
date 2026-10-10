@@ -46,7 +46,9 @@ def delete_batch(stub, keys, errors=None):
     if errors:
         response["Errors"] = [{"Key": k, "Code": "AccessDenied"} for k in errors]
     stub.add_response(
-        "delete_objects", response, {"Bucket": BUCKET, "Delete": {"Objects": [{"Key": k} for k in keys]}}
+        "delete_objects",
+        response,
+        {"Bucket": BUCKET, "Delete": {"Objects": [{"Key": k} for k in keys]}},
     )
 
 
@@ -97,7 +99,9 @@ class TestObjects:
             head(stub, "a.txt")
             head(stub, "new.txt", exists=False)
             copy(stub, "a.txt", "new.txt")
-            stub.add_client_error("delete_object", service_error_code="AccessDenied", http_status_code=403)
+            stub.add_client_error(
+                "delete_object", service_error_code="AccessDenied", http_status_code=403
+            )
             with pytest.raises(StorageError, match="could not be removed"):
                 service.move_object("a.txt", "new.txt")
 
@@ -148,7 +152,9 @@ class TestFolders:
             listing(stub, "src/", ["src/a.txt", "src/b.txt"])
             listing(stub, "dst/", [], MaxKeys=1)
             copy(stub, "src/a.txt", "dst/a.txt")
-            stub.add_client_error("copy_object", service_error_code="InternalError", http_status_code=500)
+            stub.add_client_error(
+                "copy_object", service_error_code="InternalError", http_status_code=500
+            )
             delete_batch(stub, ["dst/a.txt"])
             with pytest.raises(StorageError):
                 service.copy_folder("src", "dst")

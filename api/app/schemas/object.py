@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 from pydantic import BaseModel, Field
 
 from app.schemas.storage import (
@@ -14,11 +12,13 @@ CONTENT_TYPE_PATTERN = r"^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+(\s*;[^\r\n
 
 class ObjectListResponse(BaseModel):
     prefix: str
-    folders: List[FolderItem]
-    objects: List[ObjectMetadata]
+    folders: list[FolderItem]
+    objects: list[ObjectMetadata]
     total_count: int
     total_size: int
-    next_cursor: Optional[str] = Field(default=None, description="Pass as `cursor` to fetch the next page")
+    next_cursor: str | None = Field(
+        default=None, description="Pass as `cursor` to fetch the next page"
+    )
     has_more: bool = False
 
 
@@ -30,8 +30,10 @@ class PresignUploadRequest(BaseModel):
         max_length=255,
         description="MIME content type of the file",
     )
-    size: Optional[int] = Field(default=None, ge=0, description="File size in bytes")
-    overwrite: bool = Field(default=False, description="Replace the object if the key already exists")
+    size: int | None = Field(default=None, ge=0, description="File size in bytes")
+    overwrite: bool = Field(
+        default=False, description="Replace the object if the key already exists"
+    )
 
 
 # Responses share the storage-layer shapes.

@@ -14,7 +14,7 @@ from app.services.storage.exceptions import (
 )
 from app.services.storage.s3 import S3StorageService, content_disposition
 
-NOW = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+NOW = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
 
 
 @pytest.fixture
@@ -133,7 +133,9 @@ def test_list_objects_splits_folders_and_files(service):
         )
         folders, objects = service.list_objects("docs")
     assert [f.name for f in folders] == ["sub"]
-    assert [(o.name, o.content_type, o.etag) for o in objects] == [("readme.md", "text/markdown", "abc")]
+    assert [(o.name, o.content_type, o.etag) for o in objects] == [
+        ("readme.md", "text/markdown", "abc")
+    ]
 
 
 def test_content_disposition_is_header_safe():

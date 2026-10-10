@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -17,7 +15,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "0.1.0"
 
     STORAGE_PROVIDER: str = Field(default="minio", description="minio, s3, or r2")
-    S3_ENDPOINT: Optional[str] = Field(default=None, description="Leave empty for AWS S3")
+    S3_ENDPOINT: str | None = Field(default=None, description="Leave empty for AWS S3")
     S3_REGION: str = Field(default="us-east-1")
     S3_BUCKET: str
     S3_ACCESS_KEY: str
@@ -27,7 +25,7 @@ class Settings(BaseSettings):
     # Largest file accepted. Files over 5 GiB are uploaded in parts (S3's own maximum is 5 TiB).
     MAX_UPLOAD_BYTES: int = Field(default=5 * 1024**4, gt=0)
 
-    CORS_ORIGINS: List[str] = Field(
+    CORS_ORIGINS: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
     )
     LOG_LEVEL: str = "INFO"
@@ -42,7 +40,7 @@ class Settings(BaseSettings):
 
     @field_validator("S3_ENDPOINT")
     @classmethod
-    def _empty_endpoint_is_none(cls, value: Optional[str]) -> Optional[str]:
+    def _empty_endpoint_is_none(cls, value: str | None) -> str | None:
         return value or None
 
 

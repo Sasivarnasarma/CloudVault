@@ -1,6 +1,13 @@
 import pytest
 
-from app.core.limits import DEFAULT_PART_BYTES, GIB, MAX_PARTS, MIB, MIN_PART_BYTES, choose_part_size
+from app.core.limits import (
+    DEFAULT_PART_BYTES,
+    GIB,
+    MAX_PARTS,
+    MIB,
+    MIN_PART_BYTES,
+    choose_part_size,
+)
 
 
 @pytest.mark.parametrize("size", [1, 5 * MIB, 64 * MIB, 10 * GIB, 300 * GIB])

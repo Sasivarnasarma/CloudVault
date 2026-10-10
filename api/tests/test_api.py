@@ -1,5 +1,3 @@
-from typing import List, Optional, Tuple
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -28,11 +26,11 @@ from app.services.storage.keys import normalize_folder, normalize_key
 
 class FakeStorage(BaseStorageService):
     def __init__(self) -> None:
-        self.calls: List[Tuple[str, str]] = []
+        self.calls: list[tuple[str, str]] = []
         self.existing = {"exists.txt"}
         self.existing_folders = {"taken/"}
         self.connected = True
-        self.fail_with: Optional[Exception] = None
+        self.fail_with: Exception | None = None
 
     def check_connection(self) -> bool:
         return self.connected
@@ -43,7 +41,7 @@ class FakeStorage(BaseStorageService):
             raise self.fail_with
         return [FolderItem(name="sub", prefix=prefix + "sub/")], []
 
-    def list_page(self, prefix: str = "", limit: int = 500, cursor: Optional[str] = None):
+    def list_page(self, prefix: str = "", limit: int = 500, cursor: str | None = None):
         self.calls.append(("list_page", f"{prefix}|{limit}|{cursor}"))
         if self.fail_with:
             raise self.fail_with
@@ -52,8 +50,12 @@ class FakeStorage(BaseStorageService):
         chunk = names[start : start + limit]
         objects = [
             ObjectMetadata(
-                key=prefix + n, name=n, size=10, content_type="text/plain",
-                last_modified="2026-01-01T00:00:00Z", etag="e",
+                key=prefix + n,
+                name=n,
+                size=10,
+                content_type="text/plain",
+                last_modified="2026-01-01T00:00:00Z",
+                etag="e",
             )
             for n in chunk
         ]
@@ -144,8 +146,10 @@ class FakeStorage(BaseStorageService):
             expires_in=expires_in,
         )
 
-    def generate_download_url(self, key, expires_in=3600, filename: Optional[str] = None):
-        return PresignedDownloadData(download_url="https://example.test/get", key=key, expires_in=expires_in)
+    def generate_download_url(self, key, expires_in=3600, filename: str | None = None):
+        return PresignedDownloadData(
+            download_url="https://example.test/get", key=key, expires_in=expires_in
+        )
 
 
 @pytest.fixture
@@ -208,9 +212,13 @@ def test_list_response_totals(client):
 
 def test_presign_upload_conflict_and_validation(client):
     assert client.post("/api/objects/presign-upload", json={"key": "exists.txt"}).status_code == 409
-    ok = client.post("/api/objects/presign-upload", json={"key": "new.txt", "content_type": "text/plain"})
+    ok = client.post(
+        "/api/objects/presign-upload", json={"key": "new.txt", "content_type": "text/plain"}
+    )
     assert ok.status_code == 200 and ok.json()["method"] == "PUT"
-    bad_type = client.post("/api/objects/presign-upload", json={"key": "n.txt", "content_type": "bad\r\ntype"})
+    bad_type = client.post(
+        "/api/objects/presign-upload", json={"key": "n.txt", "content_type": "bad\r\ntype"}
+    )
     assert bad_type.status_code == 422
     too_big = client.post("/api/objects/presign-upload", json={"key": "n.txt", "size": 10**13})
     assert too_big.status_code == 413
@@ -223,12 +231,18 @@ def test_presign_upload_defaults_content_type(client):
 
 
 def test_presign_download_missing_object_is_404(client):
-    assert client.get("/api/objects/presign-download", params={"key": "nope.txt"}).status_code == 404
-    assert client.get("/api/objects/presign-download", params={"key": "exists.txt"}).status_code == 200
+    assert (
+        client.get("/api/objects/presign-download", params={"key": "nope.txt"}).status_code == 404
+    )
+    assert (
+        client.get("/api/objects/presign-download", params={"key": "exists.txt"}).status_code == 200
+    )
 
 
 def test_presign_download_returns_url(client):
-    res = client.get("/api/objects/presign-download", params={"key": "exists.txt", "filename": "x.txt"})
+    res = client.get(
+        "/api/objects/presign-download", params={"key": "exists.txt", "filename": "x.txt"}
+    )
     assert res.status_code == 200
     assert res.json()["download_url"].startswith("https://")
 
@@ -306,25 +320,38 @@ def test_cors_allows_configured_origin_only(client):
 def test_presign_upload_overwrite_flag_is_forwarded(client, storage):
     blocked = client.post("/api/objects/presign-upload", json={"key": "exists.txt"})
     assert blocked.status_code == 409
-    allowed = client.post("/api/objects/presign-upload", json={"key": "exists.txt", "overwrite": True})
+    allowed = client.post(
+        "/api/objects/presign-upload", json={"key": "exists.txt", "overwrite": True}
+    )
     assert allowed.status_code == 200
     assert ("presign_upload", "exists.txt:True") in storage.calls
 
 
 @pytest.mark.parametrize("action", ["copy", "move"])
 def test_object_transfer_success_normalizes_keys(client, storage, action):
-    res = client.post(f"/api/objects/{action}", json={"source": "/exists.txt", "destination": "/docs//new name.txt"})
+    res = client.post(
+        f"/api/objects/{action}",
+        json={"source": "/exists.txt", "destination": "/docs//new name.txt"},
+    )
     assert res.status_code == 200
-    assert res.json() == {"success": True, "source": "exists.txt", "destination": "docs/new name.txt"}
+    assert res.json() == {
+        "success": True,
+        "source": "exists.txt",
+        "destination": "docs/new name.txt",
+    }
     assert (f"{action}_object", "exists.txt->docs/new name.txt:False") in storage.calls
 
 
 @pytest.mark.parametrize("action", ["copy", "move"])
 def test_object_transfer_errors(client, action):
-    missing = client.post(f"/api/objects/{action}", json={"source": "nope.txt", "destination": "x.txt"})
+    missing = client.post(
+        f"/api/objects/{action}", json={"source": "nope.txt", "destination": "x.txt"}
+    )
     assert missing.status_code == 404
     for bad in ("/", "a/", "../x", "a\\b"):
-        res = client.post(f"/api/objects/{action}", json={"source": "exists.txt", "destination": bad})
+        res = client.post(
+            f"/api/objects/{action}", json={"source": "exists.txt", "destination": bad}
+        )
         assert res.status_code == 400, bad
         res = client.post(f"/api/objects/{action}", json={"source": bad, "destination": "x.txt"})
         assert res.status_code == 400, bad
@@ -333,12 +360,15 @@ def test_object_transfer_errors(client, action):
 @pytest.mark.parametrize("action", ["copy", "move"])
 def test_object_transfer_conflicts_unless_overwrite(client, storage, action):
     storage.existing.add("taken.txt")
-    conflict = client.post(f"/api/objects/{action}", json={"source": "exists.txt", "destination": "taken.txt"})
+    conflict = client.post(
+        f"/api/objects/{action}", json={"source": "exists.txt", "destination": "taken.txt"}
+    )
     assert conflict.status_code == 409
     assert conflict.json() == {"detail": "A file with this name already exists"}
 
     forced = client.post(
-        f"/api/objects/{action}", json={"source": "exists.txt", "destination": "taken.txt", "overwrite": True}
+        f"/api/objects/{action}",
+        json={"source": "exists.txt", "destination": "taken.txt", "overwrite": True},
     )
     assert forced.status_code == 200
     assert (f"{action}_object", "exists.txt->taken.txt:True") in storage.calls
@@ -346,17 +376,34 @@ def test_object_transfer_conflicts_unless_overwrite(client, storage, action):
 
 @pytest.mark.parametrize("action", ["copy", "move"])
 def test_folder_transfer_success_normalizes_paths(client, storage, action):
-    res = client.post(f"/api/folders/{action}", json={"source": "/docs//old", "destination": "archive/new/"})
+    res = client.post(
+        f"/api/folders/{action}", json={"source": "/docs//old", "destination": "archive/new/"}
+    )
     assert res.status_code == 200
-    assert res.json() == {"success": True, "source": "docs/old/", "destination": "archive/new/", "item_count": 5}
+    assert res.json() == {
+        "success": True,
+        "source": "docs/old/",
+        "destination": "archive/new/",
+        "item_count": 5,
+    }
     assert (f"{action}_folder", "docs/old/->archive/new/") in storage.calls
 
 
 @pytest.mark.parametrize("action", ["copy", "move"])
 def test_folder_transfer_rejects_root_and_traversal_and_conflicts(client, action):
     for bad in ("/", "//", "..", "a/../b"):
-        assert client.post(f"/api/folders/{action}", json={"source": "docs", "destination": bad}).status_code == 400
-        assert client.post(f"/api/folders/{action}", json={"source": bad, "destination": "docs2"}).status_code == 400
+        assert (
+            client.post(
+                f"/api/folders/{action}", json={"source": "docs", "destination": bad}
+            ).status_code
+            == 400
+        )
+        assert (
+            client.post(
+                f"/api/folders/{action}", json={"source": bad, "destination": "docs2"}
+            ).status_code
+            == 400
+        )
     taken = client.post(f"/api/folders/{action}", json={"source": "docs", "destination": "taken"})
     assert taken.status_code == 409
 
@@ -391,7 +438,9 @@ def test_list_rejects_invalid_limits(client, limit):
 
 
 def test_single_upload_over_5_gib_must_use_multipart(client):
-    res = client.post("/api/objects/presign-upload", json={"key": "big.bin", "size": 5 * 1024**3 + 1})
+    res = client.post(
+        "/api/objects/presign-upload", json={"key": "big.bin", "size": 5 * 1024**3 + 1}
+    )
     assert res.status_code == 413
     assert "parts" in res.json()["detail"]
     ok = client.post("/api/objects/presign-upload", json={"key": "big.bin", "size": 5 * 1024**3})
@@ -414,8 +463,15 @@ class TestMultipartRoutes:
         assert ("mp_create", "big/file.bin|application/zip|73400320|False") in storage.calls
 
     def test_create_refuses_existing_unless_overwrite(self, client, storage):
-        assert client.post("/api/uploads/multipart", json={"key": "exists.txt", "size": 10}).status_code == 409
-        forced = client.post("/api/uploads/multipart", json={"key": "exists.txt", "size": 10, "overwrite": True})
+        assert (
+            client.post(
+                "/api/uploads/multipart", json={"key": "exists.txt", "size": 10}
+            ).status_code
+            == 409
+        )
+        forced = client.post(
+            "/api/uploads/multipart", json={"key": "exists.txt", "size": 10, "overwrite": True}
+        )
         assert forced.status_code == 200
         assert ("mp_create", "exists.txt|application/octet-stream|10|True") in storage.calls
 
@@ -433,7 +489,9 @@ class TestMultipartRoutes:
         assert client.post("/api/uploads/multipart", json=body).status_code in (400, 422)
 
     def test_create_enforces_the_overall_size_limit(self, client):
-        res = client.post("/api/uploads/multipart", json={"key": "x.bin", "size": settings.MAX_UPLOAD_BYTES + 1})
+        res = client.post(
+            "/api/uploads/multipart", json={"key": "x.bin", "size": settings.MAX_UPLOAD_BYTES + 1}
+        )
         assert res.status_code == 413
 
     def test_part_urls_are_deduplicated_and_sorted(self, client, storage):
@@ -448,33 +506,57 @@ class TestMultipartRoutes:
     @pytest.mark.parametrize("numbers", [[], list(range(1, 102))])
     def test_part_url_requests_are_bounded(self, client, numbers):
         res = client.post(
-            "/api/uploads/multipart/parts", json={"key": "big.bin", "upload_id": "up-1", "part_numbers": numbers}
+            "/api/uploads/multipart/parts",
+            json={"key": "big.bin", "upload_id": "up-1", "part_numbers": numbers},
         )
         assert res.status_code == 422
 
     def test_uploaded_parts_can_be_listed_to_resume(self, client):
-        res = client.get("/api/uploads/multipart/parts", params={"key": "big.bin", "upload_id": "up-1"})
+        res = client.get(
+            "/api/uploads/multipart/parts", params={"key": "big.bin", "upload_id": "up-1"}
+        )
         assert res.status_code == 200
         assert res.json()["parts"] == [{"part_number": 1, "size": 32 * 1024**2, "etag": "e1"}]
-        missing = client.get("/api/uploads/multipart/parts", params={"key": "big.bin", "upload_id": "gone"})
+        missing = client.get(
+            "/api/uploads/multipart/parts", params={"key": "big.bin", "upload_id": "gone"}
+        )
         assert missing.status_code == 404
 
     def test_complete_and_incomplete(self, client):
-        ok = client.post("/api/uploads/multipart/complete", json={"key": "big.bin", "upload_id": "up-1", "part_count": 3})
+        ok = client.post(
+            "/api/uploads/multipart/complete",
+            json={"key": "big.bin", "upload_id": "up-1", "part_count": 3},
+        )
         assert ok.status_code == 200
         assert ok.json() == {"success": True, "key": "big.bin", "etag": "etag-final"}
-        short = client.post("/api/uploads/multipart/complete", json={"key": "big.bin", "upload_id": "up-1", "part_count": 2})
+        short = client.post(
+            "/api/uploads/multipart/complete",
+            json={"key": "big.bin", "upload_id": "up-1", "part_count": 2},
+        )
         assert short.status_code == 409
         assert "missing" in short.json()["detail"]
-        assert client.post(
-            "/api/uploads/multipart/complete", json={"key": "big.bin", "upload_id": "up-1", "part_count": 0}
-        ).status_code == 422
+        assert (
+            client.post(
+                "/api/uploads/multipart/complete",
+                json={"key": "big.bin", "upload_id": "up-1", "part_count": 0},
+            ).status_code
+            == 422
+        )
 
     def test_abort(self, client, storage):
-        res = client.post("/api/uploads/multipart/abort", json={"key": "/big.bin", "upload_id": "up-1"})
+        res = client.post(
+            "/api/uploads/multipart/abort", json={"key": "/big.bin", "upload_id": "up-1"}
+        )
         assert res.status_code == 200 and res.json() == {"success": True}
         assert ("mp_abort", "big.bin|up-1") in storage.calls
 
     def test_upload_ids_are_required(self, client):
-        assert client.post("/api/uploads/multipart/abort", json={"key": "big.bin", "upload_id": ""}).status_code == 422
-        assert client.post("/api/uploads/multipart/abort", json={"key": "big.bin"}).status_code == 422
+        assert (
+            client.post(
+                "/api/uploads/multipart/abort", json={"key": "big.bin", "upload_id": ""}
+            ).status_code
+            == 422
+        )
+        assert (
+            client.post("/api/uploads/multipart/abort", json={"key": "big.bin"}).status_code == 422
+        )

@@ -2,6 +2,7 @@
 
 MIB = 1024**2
 GIB = 1024**3
+TIB = 1024**4
 
 # A single presigned PUT is limited to 5 GiB by S3-compatible providers.
 SINGLE_UPLOAD_MAX_BYTES = 5 * GIB

@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, Query
 
-from app.core.config import settings
+from app.api.checks import check_upload_size
 from app.core.limits import MAX_PART_URLS_PER_REQUEST
 from app.schemas.upload import (
+    UPLOAD_ID_MAX_LENGTH,
     MultipartAbortResponse,
     MultipartCompleteRequest,
     MultipartCompleteResponse,
@@ -11,13 +12,11 @@ from app.schemas.upload import (
     PartUrl,
     PartUrlsRequest,
     PartUrlsResponse,
-    UPLOAD_ID_MAX_LENGTH,
     UploadedPart,
     UploadedPartsResponse,
     UploadRef,
 )
 from app.services.storage.base import BaseStorageService
-from app.services.storage.exceptions import PayloadTooLargeError
 from app.services.storage.factory import get_storage_service
 from app.services.storage.keys import normalize_key
 
@@ -33,10 +32,7 @@ def create_multipart_upload(
 ):
     """Start a multipart upload for a large file. The server chooses the part size."""
     key = normalize_key(payload.key)
-    if payload.size > settings.MAX_UPLOAD_BYTES:
-        raise PayloadTooLargeError(
-            f"File exceeds the {settings.MAX_UPLOAD_BYTES // 1024**3} GiB upload limit"
-        )
+    check_upload_size(payload.size)
     info = storage.create_multipart_upload(
         key, payload.content_type, payload.size, allow_overwrite=payload.overwrite
     )

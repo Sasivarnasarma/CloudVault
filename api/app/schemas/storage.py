@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Dict
 
 from pydantic import BaseModel, Field
 
@@ -11,7 +10,7 @@ class ObjectMetadata(BaseModel):
     content_type: str
     last_modified: datetime
     etag: str
-    metadata: Dict[str, str] = Field(default_factory=dict)
+    metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class FolderItem(BaseModel):
@@ -22,7 +21,7 @@ class FolderItem(BaseModel):
 class PresignedUploadData(BaseModel):
     upload_url: str
     method: str = "PUT"
-    headers: Dict[str, str]
+    headers: dict[str, str]
     key: str
     expires_in: int
 
