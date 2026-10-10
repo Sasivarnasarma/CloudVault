@@ -6,6 +6,7 @@ import {
   FolderUp,
   HardDrive,
   Image as ImageIcon,
+  Keyboard,
   LayoutGrid,
   Moon,
   Music2,
@@ -31,6 +32,7 @@ interface SidebarProps {
   onUploadFolder: () => void;
   onNewFolder: () => void;
   onToggleTheme: () => void;
+  onShowShortcuts?: () => void;
   onNavigateHome: () => void;
 }
 
@@ -135,25 +137,32 @@ export function Sidebar(props: SidebarProps) {
           <ConnectionStatus health={health} loading={healthLoading} error={healthError} />
           <div className="flex items-center justify-between px-1 text-xs text-ink-3">
             <span>v{health?.version ?? '0.1.0'}</span>
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <IconButton
-                  label={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
-                  onClick={props.onToggleTheme}
-                >
-                  {theme === 'light' ? <Moon className="size-4" /> : <Sun className="size-4" />}
+            <div className="flex items-center">
+              {props.onShowShortcuts && (
+                <IconButton label="Keyboard shortcuts" onClick={props.onShowShortcuts}>
+                  <Keyboard className="size-4" />
                 </IconButton>
-              </Tooltip.Trigger>
-              <Tooltip.Portal>
-                <Tooltip.Content
-                  side="top"
-                  sideOffset={6}
-                  className="z-50 rounded-md bg-ink px-2 py-1 text-xs text-canvas shadow-pop"
-                >
-                  {theme === 'light' ? 'Dark theme' : 'Light theme'}
-                </Tooltip.Content>
-              </Tooltip.Portal>
-            </Tooltip.Root>
+              )}
+              <Tooltip.Root>
+                <Tooltip.Trigger asChild>
+                  <IconButton
+                    label={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
+                    onClick={props.onToggleTheme}
+                  >
+                    {theme === 'light' ? <Moon className="size-4" /> : <Sun className="size-4" />}
+                  </IconButton>
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                  <Tooltip.Content
+                    side="top"
+                    sideOffset={6}
+                    className="z-50 rounded-md bg-ink px-2 py-1 text-xs text-canvas shadow-pop"
+                  >
+                    {theme === 'light' ? 'Dark theme' : 'Light theme'}
+                  </Tooltip.Content>
+                </Tooltip.Portal>
+              </Tooltip.Root>
+            </div>
           </div>
         </div>
       </div>

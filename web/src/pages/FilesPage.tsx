@@ -13,6 +13,7 @@ import { FileBrowser, type ViewMode } from '../features/files/FileBrowser';
 import { FileSkeleton } from '../features/files/FileSkeleton';
 import { Inspector } from '../features/files/Inspector';
 import { LoadMore } from '../features/files/LoadMore';
+import { ShortcutsDialog } from '../features/files/ShortcutsDialog';
 import { TransferDialog, type TransferTarget } from '../features/files/TransferDialog';
 import { CreateFolderModal } from '../features/folders/CreateFolderModal';
 import { UploadTray } from '../features/upload/UploadTray';
@@ -26,6 +27,7 @@ import {
   type BulkResult,
 } from '../features/files/bulkActions';
 import { useObjects } from '../features/files/useObjects';
+import { useFileShortcuts } from '../features/files/useFileShortcuts';
 import { useSelection } from '../features/files/useSelection';
 import { useTheme } from '../hooks/useTheme';
 import { useUpload } from '../features/upload/useUpload';
@@ -98,6 +100,7 @@ export function FilesPage() {
   const [bulkTransfer, setBulkTransfer] = useState<BulkTransferTarget | null>(null);
   const [dragIds, setDragIds] = useState<string[] | null>(null);
   const [movingIds, setMovingIds] = useState<string[]>([]);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -325,43 +328,53 @@ export function FilesPage() {
     }
   };
 
-  // Keyboard: "/" focuses search, Escape clears the selection, Ctrl/Cmd+A selects everything shown,
-  // Ctrl/Cmd+I inverts it, Delete removes the selected items (after confirmation), Backspace / Alt+Up go to the parent folder.
-  // (The arrow keys, Home/End, Enter and type-to-find live in the file browser itself.)
-  const keys = useRef({ clear: selection.clear, selectAll: selection.selectAll, invert: selection.invert, selected: selectedEntries, goUp: navigateUp });
-  useEffect(() => {
-    keys.current = { clear: selection.clear, selectAll: selection.selectAll, invert: selection.invert, selected: selectedEntries, goUp: navigateUp };
-  });
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      const typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
-      if (typing || e.defaultPrevented || document.querySelector('[role="dialog"]')) return;
-
-      if (e.key === 'Backspace' || (e.altKey && e.key === 'ArrowUp')) {
-        e.preventDefault();
-        keys.current.goUp();
-      } else if (e.key === '/') {
-        e.preventDefault();
-        searchRef.current?.focus();
-      } else if (e.key === 'Escape') {
-        keys.current.clear();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
-        e.preventDefault();
-        keys.current.selectAll();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
-        e.preventDefault();
-        keys.current.invert();
-      } else if (e.key === 'Delete' && keys.current.selected.length > 0) {
-        e.preventDefault();
-        setBulkDelete(keys.current.selected);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
   const openUploadPicker = () => fileInputRef.current?.click();
+
+  // Keyboard shortcuts (the full list is in lib/keymap.ts). The arrow keys, Enter, Space and
+  // type-to-find live in the file browser itself. A handler that returns false leaves the key alone.
+  const onlySelected = selectedEntries.length === 1 ? selectedEntries[0] : null;
+  useFileShortcuts({
+    focusSearch: () => searchRef.current?.focus(),
+    goUp: () => {
+      if (!currentPrefix) return false;
+      navigateUp();
+    },
+    clearSelection: () => {
+      if (selectedEntries.length === 0) return false;
+      selection.clear();
+    },
+    selectAll: selection.selectAll,
+    invertSelection: selection.invert,
+    deleteSelected: () => {
+      if (selectedEntries.length === 0) return false;
+      setBulkDelete(selectedEntries);
+    },
+    rename: () => {
+      if (!onlySelected) return false;
+      setTransfer({ entry: onlySelected, mode: 'rename' });
+    },
+    download: () => {
+      if (onlySelected?.type !== 'file') return false;
+      void handleDownload(onlySelected.file.key, onlySelected.name);
+    },
+    contextMenu: () => {
+      // Open the same menu a right-click would, next to the item that has the keyboard focus.
+      const item = document.activeElement?.closest<HTMLElement>('[data-entry-id]');
+      if (!item) return false;
+      const box = item.getBoundingClientRect();
+      item.dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: box.left + 24, clientY: box.top + 24 }),
+      );
+    },
+    newFolder: () => setFolderDialogOpen(true),
+    upload: openUploadPicker,
+    uploadFolder: () => folderInputRef.current?.click(),
+    refresh: () => {
+      loadHealth();
+      refetch();
+    },
+    showShortcuts: () => setShortcutsOpen(true),
+  });
   const closeNavAnd = (fn: () => void) => () => {
     setNavOpen(false);
     fn();
@@ -383,6 +396,7 @@ export function FilesPage() {
       onUploadFolder={closeNavAnd(() => folderInputRef.current?.click())}
       onNewFolder={closeNavAnd(() => setFolderDialogOpen(true))}
       onToggleTheme={toggleTheme}
+      onShowShortcuts={closeNavAnd(() => setShortcutsOpen(true))}
       onNavigateHome={closeNavAnd(() => navigateToFolder(''))}
     />
   );
@@ -576,6 +590,8 @@ export function FilesPage() {
           e.target.value = '';
         }}
       />
+
+      <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
       <CreateFolderModal
         isOpen={folderDialogOpen}

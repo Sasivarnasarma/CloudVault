@@ -1046,3 +1046,126 @@ describe('FilesPage keyboard selection', () => {
     expect(['Photos', 'Reports', 'notes.md', 'photo.png', 'report.pdf'].some(checked)).toBe(false);
   });
 });
+
+
+describe('FilesPage keyboard shortcuts', () => {
+  const item = (name: string) => document.querySelector(`[data-entry-main] [title="${name}"]`)!.closest('[data-entry-main]') as HTMLElement;
+  const select = async (user: Awaited<ReturnType<typeof renderPage>>, name: string) => {
+    act(() => item(name).focus());
+    await user.keyboard(' ');
+  };
+
+  it('renames the selected item with F2, and does nothing with no or several items selected', async () => {
+    const user = await renderPage();
+    await user.keyboard('{F2}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await select(user, 'notes.md');
+    await user.keyboard('{F2}');
+    expect(await screen.findByRole('dialog', { name: /Rename/ })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Rename/ })).not.toBeInTheDocument());
+
+    await user.keyboard('{Control>}a{/Control}{F2}');
+    expect(screen.queryByRole('dialog', { name: /Rename/ })).not.toBeInTheDocument();
+  });
+
+  it('downloads the selected file with Ctrl+D but not a folder', async () => {
+    const user = await renderPage();
+    await select(user, 'Reports');
+    await user.keyboard('{Control>}d{/Control}');
+    expect(requestPresignedDownload).not.toHaveBeenCalled();
+
+    await select(user, 'report.pdf');
+    await user.keyboard('{Control>}d{/Control}');
+    await waitFor(() => expect(requestPresignedDownload).toHaveBeenCalledWith('report.pdf', 'report.pdf'));
+    await waitFor(() => expect(triggerBrowserDownload).toHaveBeenCalledWith('https://storage.test/get'));
+  });
+
+  it('deletes with Delete and Shift+Delete, after confirmation', async () => {
+    const user = await renderPage();
+    await select(user, 'notes.md');
+    await user.keyboard('{Shift>}{Delete}{/Shift}');
+    expect(await screen.findByRole('dialog', { name: 'Delete “notes.md”?' })).toBeInTheDocument();
+    expect(deleteObject).not.toHaveBeenCalled();
+  });
+
+  it('opens the new folder dialog with Alt+N', async () => {
+    const user = await renderPage();
+    await user.keyboard('{Alt>}n{/Alt}');
+    expect(await screen.findByRole('dialog', { name: /folder/i })).toBeInTheDocument();
+  });
+
+  it('opens the file and folder pickers with Ctrl+U and Ctrl+Shift+U', async () => {
+    const user = await renderPage();
+    const clicks: string[] = [];
+    const spy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (this: HTMLInputElement) {
+      clicks.push(this.getAttribute('aria-label') ?? 'files');
+    });
+    await user.keyboard('{Control>}u{/Control}');
+    await user.keyboard('{Control>}{Shift>}U{/Shift}{/Control}');
+    spy.mockRestore();
+    expect(clicks).toEqual(['files', 'Upload folder']);
+  });
+
+  it('refreshes the listing with F5 instead of reloading the page', async () => {
+    const user = await renderPage();
+    const before = listMock.mock.calls.length;
+    await user.keyboard('{F5}');
+    await waitFor(() => expect(listMock.mock.calls.length).toBeGreaterThan(before));
+    await user.keyboard('{Control>}r{/Control}');
+    await waitFor(() => expect(listMock.mock.calls.length).toBeGreaterThan(before + 1));
+  });
+
+  it('focuses the search box with / and Ctrl+E', async () => {
+    const user = await renderPage();
+    const search = screen.getByPlaceholderText('Search this folder');
+    await user.keyboard('/');
+    expect(search).toHaveFocus();
+    expect(search).toHaveValue('');
+    act(() => search.blur());
+    await user.keyboard('{Control>}e{/Control}');
+    expect(search).toHaveFocus();
+  });
+
+  it('opens the menu of the focused item with Shift+F10 and the Menu key', async () => {
+    const user = await renderPage();
+    act(() => item('notes.md').focus());
+    await user.keyboard('{Shift>}{F10}{/Shift}');
+    expect(await screen.findByRole('menuitem', { name: 'Rename' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'Rename' })).not.toBeInTheDocument());
+
+    await user.keyboard('{ContextMenu}');
+    expect(await screen.findByRole('menuitem', { name: 'Download' })).toBeInTheDocument();
+  });
+
+  it('leaves the shortcuts alone while typing in a field or with a dialog open', async () => {
+    const user = await renderPage();
+    await user.click(screen.getByPlaceholderText('Search this folder'));
+    await user.keyboard('{Alt>}n{/Alt}{Control>}u{/Control}?');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    act(() => (document.activeElement as HTMLElement).blur());
+    await user.keyboard('{Alt>}n{/Alt}');
+    await screen.findByRole('dialog');
+    await user.keyboard('?');
+    expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).not.toBeInTheDocument();
+  });
+
+  it('shows every shortcut in a dialog opened with ? or from the sidebar', async () => {
+    const user = await renderPage();
+    await user.keyboard('?');
+    const dialog = await screen.findByRole('dialog', { name: 'Keyboard shortcuts' });
+    for (const group of ['Move around', 'Select', 'Work with items', 'Upload and view']) {
+      expect(within(dialog).getByRole('region', { name: group })).toBeInTheDocument();
+    }
+    expect(within(dialog).getByText('Rename')).toBeInTheDocument();
+    expect(within(dialog).getByText('F2')).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', { name: 'Keyboard shortcuts' })[0]);
+    expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
+  });
+});
