@@ -43,22 +43,32 @@ export function useSelection(orderedIds: string[], resetKey: string) {
     anchor.current = id;
   }, []);
 
-  /** Select everything between the last clicked item and this one (Shift+click). */
+  /**
+   * Select everything between the last clicked item and this one (Shift+click, Shift+arrows).
+   * `fallback` is where the range begins when nothing has been clicked or chosen yet.
+   */
   const selectRange = useCallback(
-    (id: string) => {
+    (id: string, fallback?: string) => {
       const to = orderedIds.indexOf(id);
       if (to === -1) return;
-      const from = anchor.current ? orderedIds.indexOf(anchor.current) : -1;
+      const origin = anchor.current ?? fallback ?? null;
+      const from = origin ? orderedIds.indexOf(origin) : -1;
       const start = from === -1 ? to : Math.min(from, to);
       const end = from === -1 ? to : Math.max(from, to);
       setSelected(new Set(orderedIds.slice(start, end + 1)));
       if (from === -1) anchor.current = id;
+      else if (anchor.current === null) anchor.current = origin;
     },
     [orderedIds],
   );
 
   const selectAll = useCallback(() => {
     setSelected(new Set(orderedIds));
+  }, [orderedIds]);
+
+  /** Select what is not selected and deselect what is (Ctrl+I). */
+  const invert = useCallback(() => {
+    setSelected((prev) => new Set(orderedIds.filter((id) => !prev.has(id))));
   }, [orderedIds]);
 
   const clear = useCallback(() => {
@@ -85,5 +95,5 @@ export function useSelection(orderedIds: string[], resetKey: string) {
     [orderedIds],
   );
 
-  return { selected, toggle, choose, selectRange, selectAll, clear, remove, replace };
+  return { selected, toggle, choose, selectRange, selectAll, invert, clear, remove, replace };
 }

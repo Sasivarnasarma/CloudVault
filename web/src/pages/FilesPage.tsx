@@ -326,11 +326,11 @@ export function FilesPage() {
   };
 
   // Keyboard: "/" focuses search, Escape clears the selection, Ctrl/Cmd+A selects everything shown,
-  // Delete removes the selected items (after confirmation), Backspace / Alt+Up go to the parent folder.
+  // Ctrl/Cmd+I inverts it, Delete removes the selected items (after confirmation), Backspace / Alt+Up go to the parent folder.
   // (The arrow keys, Home/End, Enter and type-to-find live in the file browser itself.)
-  const keys = useRef({ clear: selection.clear, selectAll: selection.selectAll, selected: selectedEntries, goUp: navigateUp });
+  const keys = useRef({ clear: selection.clear, selectAll: selection.selectAll, invert: selection.invert, selected: selectedEntries, goUp: navigateUp });
   useEffect(() => {
-    keys.current = { clear: selection.clear, selectAll: selection.selectAll, selected: selectedEntries, goUp: navigateUp };
+    keys.current = { clear: selection.clear, selectAll: selection.selectAll, invert: selection.invert, selected: selectedEntries, goUp: navigateUp };
   });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -349,6 +349,9 @@ export function FilesPage() {
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         keys.current.selectAll();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        keys.current.invert();
       } else if (e.key === 'Delete' && keys.current.selected.length > 0) {
         e.preventDefault();
         setBulkDelete(keys.current.selected);

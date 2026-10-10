@@ -199,11 +199,12 @@ describe.each(['list', 'grid'] as const)('keyboard navigation (%s view)', (view)
     expect(h.onChoose).not.toHaveBeenCalled();
 
     focusItem('a.txt');
-    await user.keyboard('{Shift>}{ArrowDown}{/Shift}');
-    await user.keyboard('{Control>}{ArrowDown}{/Control}');
     await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
     await user.keyboard('{Control>}d{/Control}');
+    await user.keyboard('{Control>}{Shift>}{ArrowDown}{/Shift}{/Control}');
+    expect(main('a.txt')).toHaveFocus();
     expect(h.onChoose).not.toHaveBeenCalled();
+    expect(h.onSelectRange).not.toHaveBeenCalled();
 
     const dialog = document.createElement('div');
     dialog.setAttribute('role', 'dialog');
@@ -268,5 +269,89 @@ describe('keyboard navigation (grid view)', () => {
     expect(main('b.txt')).toHaveFocus();
     expect(h.onGoUp).not.toHaveBeenCalled();
     expect(h.onOpenFolder).not.toHaveBeenCalled();
+  });
+});
+
+describe.each(['list', 'grid'] as const)('keyboard selection (%s view)', (view) => {
+  it('extends the selection from the cursor with Shift + arrows, Home / End', async () => {
+    mockGridColumns(1);
+    const { h } = renderBrowser(view);
+    const user = userEvent.setup();
+    focusItem('a.txt');
+
+    await user.keyboard('{Shift>}{ArrowDown}{/Shift}');
+    expect(h.onSelectRange).toHaveBeenLastCalledWith('b.txt', 'a.txt');
+    expect(main('b.txt')).toHaveFocus();
+    await user.keyboard('{Shift>}{End}{/Shift}');
+    expect(h.onSelectRange).toHaveBeenLastCalledWith('emu.txt', 'b.txt');
+    await user.keyboard('{Shift>}{Home}{/Shift}');
+    expect(h.onSelectRange).toHaveBeenLastCalledWith('Reports/', 'emu.txt');
+    expect(h.onChoose).not.toHaveBeenCalled();
+  });
+
+  it('moves the cursor without changing the selection while Ctrl is held', async () => {
+    mockGridColumns(1);
+    const { h, container } = renderBrowser(view);
+    const user = userEvent.setup();
+    focusItem('a.txt');
+
+    await user.keyboard('{Control>}{ArrowDown}{ArrowDown}{/Control}');
+    expect(main('bar.txt')).toHaveFocus();
+    expect(tabStops(container)).toEqual(['bar.txt']);
+    await user.keyboard('{Control>}{End}{/Control}');
+    expect(main('emu.txt')).toHaveFocus();
+    expect(h.onChoose).not.toHaveBeenCalled();
+    expect(h.onSelectRange).not.toHaveBeenCalled();
+    expect(h.onToggleSelect).not.toHaveBeenCalled();
+  });
+
+  it('selects the item under the cursor with Space and toggles it with Ctrl+Space', async () => {
+    const { h } = renderBrowser(view);
+    const user = userEvent.setup();
+    focusItem('b.txt');
+
+    await user.keyboard(' ');
+    expect(h.onChoose).toHaveBeenCalledTimes(1);
+    expect(h.onChoose).toHaveBeenCalledWith('b.txt');
+
+    await user.keyboard('{Control>} {/Control}');
+    expect(h.onToggleSelect).toHaveBeenCalledTimes(1);
+    expect(h.onToggleSelect).toHaveBeenCalledWith('b.txt');
+    expect(h.onChoose).toHaveBeenCalledTimes(1); // the button's own click did not run as well
+  });
+
+  it('ignores Space when no item has the focus, and Shift+Space', async () => {
+    const { h } = renderBrowser(view);
+    const user = userEvent.setup();
+    await user.keyboard(' ');
+    focusItem('b.txt');
+    await user.keyboard('{Shift>} {/Shift}');
+    expect(h.onChoose).not.toHaveBeenCalled();
+    expect(h.onToggleSelect).not.toHaveBeenCalled();
+  });
+});
+
+describe('keyboard selection (list view)', () => {
+  it('leaves Shift / Ctrl + left / right alone, since plain left / right navigate folders', async () => {
+    const { h } = renderBrowser('list');
+    const user = userEvent.setup();
+    focusItem('Reports');
+    await user.keyboard('{Shift>}{ArrowRight}{/Shift}{Control>}{ArrowLeft}{/Control}');
+    expect(h.onOpenFolder).not.toHaveBeenCalled();
+    expect(h.onGoUp).not.toHaveBeenCalled();
+    expect(h.onSelectRange).not.toHaveBeenCalled();
+  });
+});
+
+describe('keyboard selection (grid view)', () => {
+  it('extends left / right and by rows with Shift', async () => {
+    mockGridColumns(3);
+    const { h } = renderBrowser('grid');
+    const user = userEvent.setup();
+    focusItem('a.txt');
+    await user.keyboard('{Shift>}{ArrowRight}{/Shift}');
+    expect(h.onSelectRange).toHaveBeenLastCalledWith('b.txt', 'a.txt');
+    await user.keyboard('{Shift>}{ArrowDown}{/Shift}');
+    expect(h.onSelectRange).toHaveBeenLastCalledWith('dog.txt', 'b.txt');
   });
 });

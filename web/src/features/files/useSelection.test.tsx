@@ -81,3 +81,38 @@ describe('useSelection', () => {
     expect(result.current.selected.size).toBe(0);
   });
 });
+
+describe('useSelection (keyboard)', () => {
+  it('inverts the selection over the visible items', () => {
+    const { result } = setup();
+    act(() => result.current.toggle('b'));
+    act(() => result.current.toggle('d'));
+    act(() => result.current.invert());
+    expect(ids(result.current.selected)).toEqual(['a', 'c', 'e']);
+    act(() => result.current.invert());
+    expect(ids(result.current.selected)).toEqual(['b', 'd']);
+  });
+
+  it('inverting an empty selection selects everything', () => {
+    const { result } = setup();
+    act(() => result.current.invert());
+    expect(ids(result.current.selected)).toEqual(IDS);
+  });
+
+  it('starts a range from the fallback item when nothing has been chosen yet, then keeps that anchor', () => {
+    const { result } = setup();
+    act(() => result.current.selectRange('c', 'b'));
+    expect(ids(result.current.selected)).toEqual(['b', 'c']);
+    act(() => result.current.selectRange('e', 'c'));
+    expect(ids(result.current.selected)).toEqual(['b', 'c', 'd', 'e']);
+    act(() => result.current.selectRange('a', 'e'));
+    expect(ids(result.current.selected)).toEqual(['a', 'b']);
+  });
+
+  it('prefers the anchor over the fallback once there is one', () => {
+    const { result } = setup();
+    act(() => result.current.choose('d'));
+    act(() => result.current.selectRange('b', 'a'));
+    expect(ids(result.current.selected)).toEqual(['b', 'c', 'd']);
+  });
+});

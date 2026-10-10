@@ -994,3 +994,55 @@ describe('FilesPage keyboard navigation', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('notes.md');
   });
 });
+
+
+describe('FilesPage keyboard selection', () => {
+  const item = (name: string) => document.querySelector(`[data-entry-main] [title="${name}"]`)!.closest('[data-entry-main]') as HTMLElement;
+  const checked = (name: string) => screen.getByRole('checkbox', { name: `Select ${name}` }).getAttribute('aria-checked') === 'true';
+
+  it('extends the selection with Shift + arrows and shows the bulk bar', async () => {
+    const user = await renderPage();
+    act(() => item('Photos').focus());
+    await user.keyboard('{Shift>}{ArrowDown}{ArrowDown}{/Shift}'); // Photos, Reports, notes.md
+    expect(['Photos', 'Reports', 'notes.md'].map(checked)).toEqual([true, true, true]);
+    expect(checked('photo.png')).toBe(false);
+    expect(await screen.findByText('3 selected')).toBeInTheDocument();
+
+    await user.keyboard('{Shift>}{ArrowUp}{/Shift}');
+    expect(checked('notes.md')).toBe(false);
+    expect(checked('Reports')).toBe(true);
+  });
+
+  it('builds a selection of separate items with Ctrl+arrows and Ctrl+Space', async () => {
+    const user = await renderPage();
+    act(() => item('Photos').focus());
+    await user.keyboard('{Control>} {/Control}'); // Photos
+    await user.keyboard('{Control>}{ArrowDown}{ArrowDown}{/Control}'); // cursor on notes.md, nothing else changes
+    expect(item('notes.md')).toHaveFocus();
+    expect(checked('Reports')).toBe(false);
+    await user.keyboard('{Control>} {/Control}');
+    expect(['Photos', 'notes.md'].map(checked)).toEqual([true, true]);
+    expect(checked('Reports')).toBe(false);
+
+    await user.keyboard('{Control>} {/Control}'); // toggle notes.md off again
+    expect(checked('notes.md')).toBe(false);
+    expect(checked('Photos')).toBe(true);
+  });
+
+  it('inverts the selection with Ctrl+I', async () => {
+    const user = await renderPage();
+    await user.click(screen.getByRole('checkbox', { name: 'Select report.pdf' }));
+    await user.keyboard('{Control>}i{/Control}');
+    expect(checked('report.pdf')).toBe(false);
+    expect(['Photos', 'Reports', 'notes.md', 'photo.png'].every(checked)).toBe(true);
+    await user.keyboard('{Control>}i{/Control}');
+    expect(['Photos', 'Reports', 'notes.md', 'photo.png'].some(checked)).toBe(false);
+  });
+
+  it('does not invert while typing in the search box', async () => {
+    const user = await renderPage();
+    await user.click(screen.getByPlaceholderText('Search this folder'));
+    await user.keyboard('{Control>}i{/Control}');
+    expect(['Photos', 'Reports', 'notes.md', 'photo.png', 'report.pdf'].some(checked)).toBe(false);
+  });
+});

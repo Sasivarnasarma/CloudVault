@@ -31,8 +31,8 @@ export interface EntryHandlers {
   onChoose: (id: string) => void;
   /** Checkbox or Ctrl/Cmd+click: add or remove one item from the selection. */
   onToggleSelect: (id: string) => void;
-  /** Shift+click: select everything between the last clicked item and this one. */
-  onSelectRange: (id: string) => void;
+  /** Shift+click / Shift+arrows: select everything between the last chosen item and this one. */
+  onSelectRange: (id: string, from?: string) => void;
   onDownload: (key: string, name: string) => void;
   onDelete: (entry: Entry) => void;
   onTransfer: (entry: Entry, mode: TransferMode) => void;
@@ -373,6 +373,8 @@ export function FileBrowser(props: FileBrowserProps) {
     view,
     containerRef,
     onChoose: handlers.onChoose,
+    onToggle: handlers.onToggleSelect,
+    onExtend: handlers.onSelectRange,
     onOpenFolder: handlers.onOpenFolder,
     onGoUp,
     onReachEnd,

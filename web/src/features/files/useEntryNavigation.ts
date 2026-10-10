@@ -9,6 +9,10 @@ interface Options {
   containerRef: RefObject<HTMLElement | null>;
   /** Select just this item (without toggling it off), e.g. when the arrow keys land on it. */
   onChoose: (id: string) => void;
+  /** Add or remove one item from the selection (Ctrl+Space). */
+  onToggle: (id: string) => void;
+  /** Select everything between the anchor and this item (Shift+arrows); `from` is used if there is no anchor yet. */
+  onExtend: (id: string, from?: string) => void;
   onOpenFolder: (prefix: string) => void;
   onGoUp: () => void;
   /** The cursor reached the last loaded item: a chance to load the next page. */
@@ -53,8 +57,9 @@ function pageSize(root: HTMLElement, columns: number): number {
  *
  * One item is the "cursor" and is the only tab stop (roving tabindex), so Tab goes into the list
  * once and out again instead of through every row. Arrow keys / Home / End / PageUp / PageDown move
- * the cursor and select the item they land on; typing letters jumps to a name; Enter opens a folder
- * or shows a file's details. The keys also work when nothing is focused (after clicking empty
+ * the cursor and select the item they land on; with Shift they extend the selection from where it
+ * started, with Ctrl they move the cursor alone (Space or Ctrl+Space then selects or toggles it);
+ * typing letters jumps to a name; Enter opens a folder or shows a file's details. The keys also work when nothing is focused (after clicking empty
  * space or closing a dialog), but never while typing, in a dialog or while a menu is open.
  */
 export function useEntryNavigation(options: Options) {
@@ -83,11 +88,12 @@ export function useEntryNavigation(options: Options) {
       if (!onItem && target !== document.body) return;
       if (document.querySelector('[role="dialog"], [role="menu"]')) return;
 
-      const goTo = (index: number) => {
+      const goTo = (index: number, mode: 'select' | 'extend' | 'move' = 'select') => {
         const entry = o.entries[index];
         e.preventDefault();
         setCursor({ id: entry.id, index });
-        o.onChoose(entry.id);
+        if (mode === 'select') o.onChoose(entry.id);
+        else if (mode === 'extend') o.onExtend(entry.id, o.entries[current]?.id);
         findItem(root, entry.id)?.querySelector<HTMLElement>(ITEM_MAIN)?.focus();
         if (index === o.entries.length - 1) o.onReachEnd?.();
       };
@@ -100,9 +106,18 @@ export function useEntryNavigation(options: Options) {
         return;
       }
 
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.altKey) return;
+      const mod = e.ctrlKey || e.metaKey;
 
-      if (isTypeAheadChar(e)) {
+      if (e.key === ' ' && onItem && !e.shiftKey) {
+        e.preventDefault();
+        const entry = o.entries[current];
+        if (mod) o.onToggle(entry.id);
+        else o.onChoose(entry.id);
+        return;
+      }
+
+      if (!mod && isTypeAheadChar(e)) {
         typed.current = extendTypeAhead(typed.current, e.key, Date.now());
         const match = typeAheadMatch(
           o.entries.map((x) => x.name),
@@ -113,10 +128,12 @@ export function useEntryNavigation(options: Options) {
         return;
       }
 
-      if (!isNavKey(e.key) || e.shiftKey) return;
+      if (!isNavKey(e.key) || (mod && e.shiftKey)) return;
+      const mode = mod ? 'move' : e.shiftKey ? 'extend' : 'select';
 
       // In the list the left/right arrows go up a folder / into the folder under the cursor.
       if (o.view === 'list' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        if (mode !== 'select') return;
         e.preventDefault();
         if (e.key === 'ArrowLeft') o.onGoUp();
         else {
@@ -128,17 +145,28 @@ export function useEntryNavigation(options: Options) {
 
       // Nothing has been focused yet: the first key lands on the first item (or the last, for End).
       if (!onItem && !c) {
-        goTo(e.key === 'End' ? o.entries.length - 1 : 0);
+        goTo(e.key === 'End' ? o.entries.length - 1 : 0, mode);
         return;
       }
 
       const columns = o.view === 'grid' ? gridColumns(root) : 1;
       const next = nextIndex(e.key, current, o.entries.length, { columns, pageSize: pageSize(root, columns) });
-      if (next !== null) goTo(next);
+      if (next !== null) goTo(next, mode);
+    };
+
+    // Space on a button clicks it when released (Firefox even after keydown was cancelled).
+    const onKeyUp = (e: KeyboardEvent) => {
+      const root = latest.current.options.containerRef.current;
+      const target = e.target as HTMLElement | null;
+      if (e.key === ' ' && root && target?.matches?.(ITEM_MAIN) && root.contains(target)) e.preventDefault();
     };
 
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKeyUp);
+    };
   }, []);
 
   /** Focus moving onto an item (by mouse or Tab) makes it the cursor. */
