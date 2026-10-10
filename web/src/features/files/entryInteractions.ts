@@ -39,7 +39,7 @@ export function menuFor(entry: Entry, h: EntryHandlers): MenuItem[] {
         onSelect: () => h.onPasteInto(entry.folder.prefix),
       },
       ...organize,
-      { label: 'Delete folder', icon: Trash2, danger: true, separatorBefore: true, onSelect: () => h.onDelete(entry) },
+      { label: 'Move to trash', icon: Trash2, danger: true, separatorBefore: true, onSelect: () => h.onDelete(entry) },
     ];
   }
   return [
@@ -47,7 +47,7 @@ export function menuFor(entry: Entry, h: EntryHandlers): MenuItem[] {
     { label: 'Download', icon: Download, onSelect: () => h.onDownload(entry.file.key, entry.name) },
     ...clipboard,
     ...organize,
-    { label: 'Delete', icon: Trash2, danger: true, separatorBefore: true, onSelect: () => h.onDelete(entry) },
+    { label: 'Move to trash', icon: Trash2, danger: true, separatorBefore: true, onSelect: () => h.onDelete(entry) },
   ];
 }
 

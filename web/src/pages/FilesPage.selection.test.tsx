@@ -1,10 +1,11 @@
-import { installPageMocks, renderPage, listMock } from './filesPage.testkit';
+import { BATCH_ID, installPageMocks, renderPage, listMock } from './filesPage.testkit';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { copyFolder, deleteFolder } from '../services/folderService';
 import { ApiError } from '../services/http';
 import { copyObject, deleteObject, moveObject } from '../services/objectService';
+import { moveToTrash } from '../services/trashService';
 
 beforeEach(installPageMocks);
 
@@ -90,40 +91,96 @@ describe('FilesPage multi-select and bulk actions', () => {
     expect(await screen.findByRole('complementary', { name: 'File details' })).toBeInTheDocument();
   });
 
-  describe('bulk delete', () => {
-    it('deletes every selected file and folder after confirmation', async () => {
+  describe('bulk delete (to the trash)', () => {
+    it('moves every selected file and folder to the trash in one go', async () => {
       const user = await renderPage();
       await check(user, 'report.pdf');
       await check(user, 'notes.md');
       await check(user, 'Reports');
-      await user.click(await screen.findByRole('button', { name: 'Delete' }));
+      const callsBefore = listMock.mock.calls.length;
+      await user.click(await screen.findByRole('button', { name: 'Move to trash' }));
+
+      await waitFor(() => expect(moveToTrash).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(moveToTrash).mock.calls[0][0]).toEqual(
+        expect.arrayContaining([
+          { path: 'report.pdf', type: 'file' },
+          { path: 'notes.md', type: 'file' },
+          { path: 'Reports/', type: 'folder' },
+        ]),
+      );
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(await screen.findByText('Moved 2 files and 1 folder to the trash')).toBeInTheDocument();
+      await waitFor(() => expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore));
+      await waitFor(() => expect(screen.queryByRole('toolbar')).not.toBeInTheDocument());
+    });
+
+    it('keeps the items that could not be moved selected and reports them', async () => {
+      vi.mocked(moveToTrash).mockImplementation(async (items) => ({
+        batch: {
+          id: BATCH_ID,
+          deleted_at: '2026-01-01T00:00:00Z',
+          total_size: 1,
+          roots: items.filter((i) => i.path !== 'notes.md').map((i) => ({ ...i, size: 1, item_count: 1 })),
+        },
+        failed: [{ path: 'notes.md', error: 'Storage service is unavailable' }],
+      }));
+      const user = await renderPage();
+      await check(user, 'report.pdf');
+      await check(user, 'notes.md');
+      await user.click(await screen.findByRole('button', { name: 'Move to trash' }));
+
+      expect(await screen.findByText('Couldn’t move 1 of 2 items to the trash')).toBeInTheDocument();
+      expect(screen.getByText('Storage service is unavailable')).toBeInTheDocument();
+      expect(await screen.findByText('Moved 1 file to the trash')).toBeInTheDocument();
+      await waitFor(() => expect(isChecked('notes.md')).toBe('true'));
+    });
+
+    it('does the same from the Delete key, but not while typing', async () => {
+      const user = await renderPage();
+      await check(user, 'report.pdf');
+      await check(user, 'notes.md');
+      await user.type(screen.getByRole('searchbox'), '{Delete}');
+      expect(moveToTrash).not.toHaveBeenCalled();
+
+      await user.click(document.body);
+      await user.keyboard('{Delete}');
+      await waitFor(() => expect(moveToTrash).toHaveBeenCalledTimes(1));
+      expect(await screen.findByText('Moved 2 files to the trash')).toBeInTheDocument();
+    });
+
+    it('deletes for good, after confirmation, with Shift+Delete', async () => {
+      const user = await renderPage();
+      await check(user, 'report.pdf');
+      await check(user, 'notes.md');
+      await check(user, 'Reports');
+      await user.click(document.body);
+      await user.keyboard('{Shift>}{Delete}{/Shift}');
 
       const dialog = await screen.findByRole('dialog', { name: 'Delete 3 items?' });
       expect(dialog).toHaveTextContent('2 files and 1 folder');
       expect(dialog).toHaveTextContent('including everything inside the folders');
       expect(deleteObject).not.toHaveBeenCalled();
+      expect(moveToTrash).not.toHaveBeenCalled();
 
-      const callsBefore = listMock.mock.calls.length;
       await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
       await waitFor(() => expect(deleteObject).toHaveBeenCalledTimes(2));
       expect(deleteObject).toHaveBeenCalledWith('report.pdf');
       expect(deleteObject).toHaveBeenCalledWith('notes.md');
       expect(deleteFolder).toHaveBeenCalledWith('Reports/');
-      await waitFor(() => expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore));
-      await waitFor(() => expect(screen.queryByRole('toolbar')).not.toBeInTheDocument());
     });
 
-    it('does nothing when cancelled', async () => {
+    it('does nothing when the permanent delete is cancelled', async () => {
       const user = await renderPage();
       await check(user, 'report.pdf');
       await check(user, 'notes.md');
-      await user.click(await screen.findByRole('button', { name: 'Delete' }));
+      await user.click(document.body);
+      await user.keyboard('{Shift>}{Delete}{/Shift}');
       await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }));
       expect(deleteObject).not.toHaveBeenCalled();
       expect(screen.getByText('2 selected')).toBeInTheDocument();
     });
 
-    it('keeps the items that failed selected and reports them', async () => {
+    it('keeps the items that failed a permanent delete selected and reports them', async () => {
       vi.mocked(deleteObject).mockImplementation(async (key) => {
         if (key === 'notes.md') throw new Error('Storage service is unavailable');
         return { success: true, key, message: '' };
@@ -131,25 +188,14 @@ describe('FilesPage multi-select and bulk actions', () => {
       const user = await renderPage();
       await check(user, 'report.pdf');
       await check(user, 'notes.md');
-      await user.click(await screen.findByRole('button', { name: 'Delete' }));
+      await user.click(document.body);
+      await user.keyboard('{Shift>}{Delete}{/Shift}');
       await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
 
       await waitFor(() => expect(deleteObject).toHaveBeenCalledTimes(2));
       expect(await screen.findByText('Couldn’t delete 1 of 2 items')).toBeInTheDocument();
       expect(screen.getByText('Storage service is unavailable')).toBeInTheDocument();
       await waitFor(() => expect(isChecked('notes.md')).toBe('true'));
-    });
-
-    it('opens the same confirmation from the Delete key, but not while typing', async () => {
-      const user = await renderPage();
-      await check(user, 'report.pdf');
-      await check(user, 'notes.md');
-      await user.type(screen.getByRole('searchbox'), '{Delete}');
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-
-      await user.click(document.body);
-      await user.keyboard('{Delete}');
-      expect(await screen.findByRole('dialog', { name: 'Delete 2 items?' })).toBeInTheDocument();
     });
   });
 

@@ -111,6 +111,27 @@ function renderToolbar(overrides: Partial<React.ComponentProps<typeof Toolbar>> 
   return handlers;
 }
 
+describe('Sidebar trash link', () => {
+  it('is only shown when the page can open the trash', () => {
+    renderSidebar();
+    expect(screen.queryByRole('button', { name: 'Trash' })).not.toBeInTheDocument();
+  });
+
+  it('opens the trash and says when it is the place being shown', async () => {
+    const onOpenTrash = vi.fn();
+    renderSidebar({ onOpenTrash });
+    await userEvent.click(screen.getByRole('button', { name: 'Trash' }));
+    expect(onOpenTrash).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Trash' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('highlights the trash instead of the category while it is shown', () => {
+    renderSidebar({ onOpenTrash: vi.fn(), trashActive: true, filter: 'all' });
+    expect(screen.getByRole('button', { name: 'Trash' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: /^All files/ })).not.toHaveAttribute('aria-current');
+  });
+});
+
 describe('Toolbar', () => {
   it('goes up a folder, but not from the root', async () => {
     const { onNavigateUp } = renderToolbar();

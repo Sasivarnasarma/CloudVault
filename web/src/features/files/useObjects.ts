@@ -13,7 +13,8 @@ function readPrefixFromUrl(): string {
   return clean ? `${clean}/` : '';
 }
 
-function urlForPrefix(prefix: string): string {
+/** The address of a folder: the current page with ?p=<folder>, or none for the root. */
+export function urlForPrefix(prefix: string): string {
   const { pathname, hash } = window.location;
   if (!prefix) return `${pathname}${hash}`;
   const path = encodeURIComponent(prefix.replace(/\/+$/, '')).replace(/%2F/g, '/');
@@ -46,12 +47,16 @@ export function useObjects() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  /** The folder is being loaded again while the old listing stays on screen. */
+  const [refreshing, setRefreshing] = useState(false);
 
   // Always points at the folder being viewed, so late callbacks refresh the right listing.
   const prefixRef = useRef(currentPrefix);
   // Incremented per request; only the latest response may update state.
   const latestRequest = useRef(0);
   const cursorRef = useRef<string | null>(null);
+  // The folder the listing on screen belongs to (null until something has loaded).
+  const loadedPrefix = useRef<string | null>(null);
   const loadingMoreRef = useRef(false);
 
   /** Show the "loading" state again and forget what the previous request left behind. */
@@ -80,14 +85,19 @@ export function useObjects() {
       const result = await listObjects(prefix, { limit: PAGE_SIZE });
       if (requestId !== latestRequest.current) return;
       cursorRef.current = result.next_cursor ?? null;
+      loadedPrefix.current = prefix;
       setHasMore(!!result.has_more);
       setData(result);
+      setError(null);
     } catch (err) {
       if (requestId === latestRequest.current) {
         setError(errorMessage(err, 'Failed to load storage objects'));
       }
     } finally {
-      if (requestId === latestRequest.current) setLoading(false);
+      if (requestId === latestRequest.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
@@ -144,15 +154,26 @@ export function useObjects() {
     navigateToFolder(parts.length > 0 ? parts.join('/') + '/' : '');
   }, [navigateToFolder]);
 
+  /**
+   * Load the folder again. The listing stays on screen until the new one arrives, so the list is not
+   * replaced by a placeholder (and anything that has the keyboard focus keeps it).
+   */
   const refetch = useCallback(() => {
-    resetListingState();
+    // After an error there is nothing worth keeping on screen, so show the placeholder again.
+    if (loadedPrefix.current !== prefixRef.current) setLoading(true);
+    setError(null);
+    setRefreshing(true);
+    setHasMore(false);
+    setLoadingMore(false);
+    setLoadMoreError(null);
     fetchListing(prefixRef.current);
-  }, [fetchListing, resetListingState]);
+  }, [fetchListing]);
 
   return {
     currentPrefix,
     data,
     loading,
+    refreshing,
     error,
     hasMore,
     loadingMore,

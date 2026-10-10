@@ -9,6 +9,7 @@ from app.schemas.storage import (
     TreeFile,
     UploadedPartInfo,
 )
+from app.schemas.trash import TrashBatch, TrashFailure
 
 
 class BaseStorageService(ABC):
@@ -95,6 +96,33 @@ class BaseStorageService(ABC):
     @abstractmethod
     def move_folder(self, source_prefix: str, destination_prefix: str) -> int:
         """Recursively move a folder. Never overwrites; returns the number of objects moved."""
+
+    # --- trash ----------------------------------------------------------------------
+
+    @abstractmethod
+    def move_to_trash(
+        self, items: list[tuple[str, str]]
+    ) -> tuple[TrashBatch | None, list[TrashFailure]]:
+        """Move files and folders into the trash as one batch.
+
+        `items` are (type, path) pairs with type "file" or "folder". Each one succeeds or fails on
+        its own; the batch is None when none could be moved.
+        """
+
+    @abstractmethod
+    def list_trash(self, limit: int = 200) -> list[TrashBatch]:
+        """The newest batches in the trash, newest first."""
+
+    @abstractmethod
+    def restore_from_trash(self, batch_id: str) -> tuple[list[str], list[TrashFailure]]:
+        """Put a batch back where it was. Never overwrites; what cannot go back stays in the trash.
+
+        Raises ObjectNotFoundError if the batch is not in the trash.
+        """
+
+    @abstractmethod
+    def purge_trash(self, batch_id: str | None = None) -> int:
+        """Delete one batch for good, or everything in the trash. Returns how many objects went."""
 
     # --- presigned upload -----------------------------------------------------------
 

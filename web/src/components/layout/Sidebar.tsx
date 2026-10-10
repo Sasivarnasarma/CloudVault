@@ -11,6 +11,7 @@ import {
   Moon,
   Music2,
   Sun,
+  Trash2,
   Upload,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
@@ -33,6 +34,10 @@ interface SidebarProps {
   onNewFolder: () => void;
   onToggleTheme: () => void;
   onShowShortcuts?: () => void;
+  /** Show the trash instead of the files. */
+  onOpenTrash?: () => void;
+  /** The trash is what the page is showing. */
+  trashActive?: boolean;
   onNavigateHome: () => void;
 }
 
@@ -82,7 +87,7 @@ function ConnectionStatus({
 }
 
 export function Sidebar(props: SidebarProps) {
-  const { health, healthLoading, healthError, filter, counts, theme, onFilterChange } = props;
+  const { health, healthLoading, healthError, filter, counts, theme, onFilterChange, trashActive } = props;
 
   return (
     <Tooltip.Provider delayDuration={300}>
@@ -119,7 +124,7 @@ export function Sidebar(props: SidebarProps) {
           <p className="mb-2 px-2 text-xs font-medium uppercase tracking-wider text-ink-3">In this folder</p>
           <ul className="space-y-0.5">
             {FILTERS.map(({ id, label, icon: Icon }) => {
-              const active = filter === id;
+              const active = !trashActive && filter === id;
               return (
                 <li key={id}>
                   <button
@@ -140,6 +145,21 @@ export function Sidebar(props: SidebarProps) {
             })}
           </ul>
         </nav>
+
+        {props.onOpenTrash && (
+          <button
+            type="button"
+            onClick={props.onOpenTrash}
+            aria-current={trashActive ? 'page' : undefined}
+            className={cn(
+              'flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm transition',
+              trashActive ? 'bg-accent-soft font-medium text-accent' : 'text-ink-2 hover:bg-sunken hover:text-ink',
+            )}
+          >
+            <Trash2 className="size-4" />
+            <span className="flex-1 text-left">Trash</span>
+          </button>
+        )}
 
         <div className="space-y-3">
           <ConnectionStatus health={health} loading={healthLoading} error={healthError} />

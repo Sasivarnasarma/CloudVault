@@ -17,6 +17,9 @@ MAX_PART_URLS_PER_REQUEST = 100
 MAX_ARCHIVE_FILES = 10_000
 MAX_DOWNLOAD_URLS_PER_REQUEST = 100
 
+# Deleting: how many files and folders one request can move to the trash.
+MAX_TRASH_ITEMS_PER_REQUEST = 200
+
 
 def choose_part_size(total_bytes: int) -> int:
     """Smallest part size (>= default, whole MiB) that keeps the part count within limits."""

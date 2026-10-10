@@ -18,6 +18,7 @@ import {
   listUploadedParts,
   presignUploadParts,
 } from './multipartService';
+import { deleteFromTrash, emptyTrash, listTrash, moveToTrash, restoreFromTrash } from './trashService';
 import {
   isAbortError,
   TransferError,
@@ -356,5 +357,47 @@ describe('transferService', () => {
     expect(anchor.rel).toBe('noopener noreferrer');
     expect(document.body.contains(anchor)).toBe(false);
     click.mockRestore();
+  });
+});
+
+describe('trashService', () => {
+  it('moves files and folders to the trash in one request', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ batch: null, failed: [] }));
+    await moveToTrash([
+      { path: 'a.txt', type: 'file' },
+      { path: 'docs/', type: 'folder' },
+    ]);
+    const { url, init } = lastCall();
+    expect(url).toBe('/api/trash');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(String(init?.body))).toEqual({
+      items: [
+        { path: 'a.txt', type: 'file' },
+        { path: 'docs/', type: 'folder' },
+      ],
+    });
+  });
+
+  it('lists, restores, deletes one batch and empties the trash', async () => {
+    fetchMock.mockImplementation(async () => jsonResponse({ batches: [], total_size: 0, restored: [], failed: [] }));
+    await listTrash();
+    expect(lastCall().url).toBe('/api/trash');
+
+    await restoreFromTrash('20260101T000000Z-abc123');
+    expect(lastCall().url).toBe('/api/trash/20260101T000000Z-abc123/restore');
+    expect(lastCall().init?.method).toBe('POST');
+
+    await deleteFromTrash('20260101T000000Z-abc123');
+    expect(lastCall().url).toBe('/api/trash/20260101T000000Z-abc123');
+    expect(lastCall().init?.method).toBe('DELETE');
+
+    await emptyTrash();
+    expect(lastCall().url).toBe('/api/trash');
+    expect(lastCall().init?.method).toBe('DELETE');
+  });
+
+  it('turns an error answer into the message from the API', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ detail: 'That item is no longer in the trash' }, 404));
+    await expect(restoreFromTrash('20260101T000000Z-abc123')).rejects.toThrow('no longer in the trash');
   });
 });

@@ -131,7 +131,7 @@ describe('FileBrowser (grid)', () => {
     expect(onDownload).toHaveBeenCalledWith('report.pdf', 'report.pdf');
 
     await userEvent.click(screen.getByRole('button', { name: 'More actions for Reports' }));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete folder' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Move to trash' }));
     expect(onDelete).toHaveBeenCalledWith(entries[0]);
   });
 });
@@ -237,7 +237,7 @@ describe('Inspector', () => {
     const { onClose, onDownload, onDelete } = renderInspector();
     await userEvent.click(screen.getByRole('button', { name: 'Download' }));
     expect(onDownload).toHaveBeenCalledWith('report.pdf', 'report.pdf');
-    await userEvent.click(screen.getByRole('button', { name: 'Delete file' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Move to trash' }));
     expect(onDelete).toHaveBeenCalledWith(report);
     await userEvent.click(screen.getByRole('button', { name: 'Close details' }));
     expect(onClose).toHaveBeenCalled();

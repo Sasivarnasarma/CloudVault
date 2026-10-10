@@ -92,6 +92,23 @@ Direct browser transfers also require a CORS rule on the **bucket** that allows
 `PUT` (uploads) and `GET` (downloading folders or a selection as a zip, which the
 browser builds from files it fetches itself) from your frontend origin.
 
+### Trash
+
+Deleting a file or folder moves it to a reserved folder in the bucket,
+`.cloudvault-trash/`, instead of removing it. It is hidden from the file list and
+the API refuses to touch it except through the trash endpoints. A toast offers
+**Undo** (Ctrl+Z also works), and the **Trash** page in the sidebar restores items
+to where they were or deletes them for good. **Shift+Delete** deletes immediately,
+after a confirmation. Restoring never overwrites: if the name is taken again the item
+stays in the trash. A file over 5 GiB cannot be moved to the trash (it cannot be
+copied in one step), so the app offers to delete it permanently instead.
+
+Nothing leaves the trash on its own. To clean it up automatically, add a **lifecycle
+rule** on the bucket that expires objects under the prefix `.cloudvault-trash/` after
+a number of days (for example 30). Add another rule to abort incomplete multipart
+uploads after a few days: an upload that is cancelled or interrupted can leave its
+parts behind, and the bucket keeps (and bills) them until they are aborted.
+
 ## Project layout
 
 ```text

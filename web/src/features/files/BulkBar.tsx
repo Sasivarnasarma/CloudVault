@@ -51,7 +51,7 @@ export function BulkBar({ entries, busy, onMove, onCopy, onDownloadZip, onDelete
             disabled={busy}
           >
             <Trash2 className="size-4" />
-            <span className="max-sm:sr-only">Delete</span>
+            <span className="max-sm:sr-only">Move to trash</span>
           </Button>
           <IconButton label="Clear selection" onClick={onClear}>
             <X className="size-4" />

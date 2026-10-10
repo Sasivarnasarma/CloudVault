@@ -9,6 +9,9 @@ import re
 from app.services.storage.exceptions import InvalidKeyError
 
 MAX_KEY_BYTES = 1024
+# Deleted items wait here. Normal routes cannot name anything under it: only the trash can.
+TRASH_PREFIX = ".cloudvault-trash/"
+_TRASH_NAME = TRASH_PREFIX.rstrip("/")
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -25,6 +28,8 @@ def _normalize(raw: str, what: str) -> str:
         raise InvalidKeyError(f"{what} cannot contain blank segments")
 
     normalized = "/".join(segments)
+    if normalized == _TRASH_NAME or normalized.startswith(TRASH_PREFIX):
+        raise InvalidKeyError(f"{what} is reserved for the trash")
     if len(normalized.encode("utf-8")) > MAX_KEY_BYTES:
         raise InvalidKeyError(f"{what} is too long (max {MAX_KEY_BYTES} bytes)")
     return normalized

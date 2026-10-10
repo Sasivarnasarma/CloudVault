@@ -21,17 +21,20 @@ import { TransferDialog } from '../features/files/TransferDialog';
 import { useClipboard } from '../features/files/useClipboard';
 import { useDeleteActions } from '../features/files/useDeleteActions';
 import { useDragMove } from '../features/files/useDragMove';
-import { useFileShortcuts } from '../features/files/useFileShortcuts';
+import { useFileShortcuts, type ShortcutHandlers } from '../features/files/useFileShortcuts';
 import { useFolderView } from '../features/files/useFolderView';
 import { useObjects } from '../features/files/useObjects';
 import { useSelection } from '../features/files/useSelection';
 import { useTransfers } from '../features/files/useTransfers';
 import { useZipDownload } from '../features/files/useZipDownload';
+import { useMoveToTrash } from '../features/trash/useMoveToTrash';
 import { CreateFolderModal } from '../features/folders/CreateFolderModal';
 import { DropOverlay } from '../features/upload/DropOverlay';
 import { UploadPickers } from '../features/upload/UploadPickers';
 import { UploadTray } from '../features/upload/UploadTray';
 import { useFolderUploads } from '../features/upload/useFolderUploads';
+import { TrashView } from '../features/trash/TrashView';
+import { useAppView } from '../hooks/useAppView';
 import { useHealth } from '../hooks/useHealth';
 import { useTheme } from '../hooks/useTheme';
 import type { Entry } from '../lib/entries';
@@ -46,6 +49,7 @@ export function FilesPage() {
   const listing = useObjects();
   const { currentPrefix, data, navigateToFolder, navigateUp, refetch } = listing;
 
+  const app = useAppView(currentPrefix);
   const view = useFolderView(data, currentPrefix);
   const selection = useSelection(
     useMemo(() => view.entries.map((e) => e.id), [view.entries]),
@@ -76,6 +80,11 @@ export function FilesPage() {
 
   const uploads = useFolderUploads(currentPrefix, refetch);
   const deletes = useDeleteActions({ onDeleted: selection.remove, onRefresh: refetch });
+  const trash = useMoveToTrash({
+    onMoved: selection.remove,
+    onRefresh: refetch,
+    onDeleteForever: deletes.request,
+  });
   const transfers = useTransfers({ selection, onRefresh: refetch });
   const drag = useDragMove({ entries: view.allEntries, currentPrefix, run: transfers.run });
   const zip = useZipDownload();
@@ -83,7 +92,7 @@ export function FilesPage() {
 
   // Keyboard shortcuts (the full list is in lib/keymap.ts). The arrow keys, Enter, Space and
   // type-to-find live in the file browser itself. A handler that returns false leaves the key alone.
-  useFileShortcuts({
+  const shortcuts: ShortcutHandlers = {
     focusSearch: () => searchRef.current?.focus(),
     goUp: () => {
       if (!currentPrefix) return false;
@@ -105,8 +114,13 @@ export function FilesPage() {
     invertSelection: selection.invert,
     deleteSelected: () => {
       if (selected.length === 0) return false;
+      void trash.request(selected);
+    },
+    deleteForever: () => {
+      if (selected.length === 0) return false;
       deletes.request(selected);
     },
+    undo: trash.undoLast,
     rename: () => {
       if (!onlySelected) return false;
       transfers.openTransfer({ entry: onlySelected, mode: 'rename' });
@@ -136,13 +150,23 @@ export function FilesPage() {
     uploadFolder: uploads.openFolderPicker,
     refresh,
     showShortcuts: () => setShortcutsOpen(true),
-  });
+  };
+  // The trash has no files on screen to act on, so only the shortcuts that still make sense stay.
+  useFileShortcuts(
+    app.view === 'files' ? shortcuts : { showShortcuts: shortcuts.showShortcuts, refresh: shortcuts.refresh },
+  );
 
   /** An action from the sidebar, which also closes it when it is the slide-in drawer on a small screen. */
   const fromSidebar = (action: () => void) => () => {
     setNavOpen(false);
     action();
   };
+  /** A sidebar action that belongs to the files: leave the trash first if that is what is showing. */
+  const toFiles = (action: () => void) =>
+    fromSidebar(() => {
+      app.openFiles();
+      action();
+    });
 
   const sidebar = (
     <Sidebar
@@ -152,16 +176,15 @@ export function FilesPage() {
       filter={view.filter}
       counts={view.counts}
       theme={theme}
-      onFilterChange={(f) => {
-        view.setFilter(f);
-        setNavOpen(false);
-      }}
-      onUpload={fromSidebar(uploads.openFilePicker)}
-      onUploadFolder={fromSidebar(uploads.openFolderPicker)}
-      onNewFolder={fromSidebar(() => setFolderDialogOpen(true))}
+      trashActive={app.view === 'trash'}
+      onOpenTrash={fromSidebar(app.openTrash)}
+      onFilterChange={(f) => toFiles(() => view.setFilter(f))()}
+      onUpload={toFiles(uploads.openFilePicker)}
+      onUploadFolder={toFiles(uploads.openFolderPicker)}
+      onNewFolder={toFiles(() => setFolderDialogOpen(true))}
       onToggleTheme={toggleTheme}
       onShowShortcuts={fromSidebar(() => setShortcutsOpen(true))}
-      onNavigateHome={fromSidebar(() => navigateToFolder(''))}
+      onNavigateHome={toFiles(() => navigateToFolder(''))}
     />
   );
 
@@ -186,123 +209,127 @@ export function FilesPage() {
         {sidebar}
       </MobileDrawer>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Toolbar
-          currentPrefix={currentPrefix}
-          rootLabel={ROOT_LABEL}
-          search={view.search}
-          searchRef={searchRef}
-          view={view.view}
-          sort={view.sort}
-          refreshing={listing.loading || health.loading}
-          onNavigate={navigateToFolder}
-          onNavigateUp={navigateUp}
-          onSearchChange={view.setSearch}
-          onViewChange={view.setView}
-          onSortChange={view.changeSort}
-          onRefresh={refresh}
-          onOpenNav={() => setNavOpen(true)}
-          dragActive={drag.dragIds !== null}
-          onDropToPrefix={drag.dropOn}
-        />
-
-        <ClipboardBar
-          clipboard={clipboard.clipboard}
-          destination={folderLabel(currentPrefix, ROOT_LABEL)}
-          canPaste={clipboard.canPaste}
-          busy={transfers.transferring}
-          onPaste={() => clipboard.paste()}
-          onClear={clipboard.clear}
-        />
-
-        <div className="relative flex min-h-0 flex-1">
-          <EntryContextMenu items={pageMenu}>
-            <main className="min-w-0 flex-1 overflow-y-auto" aria-busy={listing.loading}>
-              <ListingState
-                error={listing.error}
-                loading={listing.loading}
-                empty={view.entries.length === 0}
-                filtered={view.filtered}
-                view={view.view}
-                onRetry={refetch}
-                onClearFilters={() => {
-                  view.setSearch('');
-                  view.setFilter('all');
-                }}
-              >
-                <FileBrowser
-                  key={`${currentPrefix}|${view.view}`}
-                  entries={view.entries}
-                  view={view.view}
-                  selection={selection.selected}
-                  sort={view.sort}
-                  onSortChange={view.changeSort}
-                  onOpenFolder={navigateToFolder}
-                  onChoose={selection.choose}
-                  onToggleSelect={selection.toggle}
-                  onSelectRange={selection.selectRange}
-                  onSelectAll={selection.selectAll}
-                  onClearSelection={selection.clear}
-                  onGoUp={navigateUp}
-                  onReachEnd={listing.hasMore ? listing.loadMore : undefined}
-                  dragIds={drag.dragIds}
-                  busyIds={transfers.movingIds}
-                  cutIds={clipboard.cutIds}
-                  onDragStart={drag.startDrag}
-                  onDragEnd={drag.endDrag}
-                  onDropOnFolder={drag.dropOn}
-                  onDownload={downloadFile}
-                  onDownloadZip={zip.download}
-                  onCut={(entry) => clipboard.cut(targetsOf(entry))}
-                  onCopy={(entry) => clipboard.copy(targetsOf(entry))}
-                  onPasteInto={(prefix) => void clipboard.paste(prefix)}
-                  canPasteInto={clipboard.canPasteInto}
-                  onDelete={(entry) => deletes.request([entry])}
-                  onTransfer={(entry, mode) => transfers.openTransfer({ entry, mode })}
-                />
-              </ListingState>
-              {!listing.loading && !listing.error && (
-                <LoadMore
-                  hasMore={listing.hasMore}
-                  loading={listing.loadingMore}
-                  error={listing.loadMoreError}
-                  loadedCount={view.allEntries.length}
-                  onLoadMore={listing.loadMore}
-                />
-              )}
-            </main>
-          </EntryContextMenu>
-
-          <BulkBar
-            entries={bulkEntries}
-            busy={deletes.deleting}
-            onMove={() => transfers.openBulkTransfer({ mode: 'move', entries: bulkEntries })}
-            onCopy={() => transfers.openBulkTransfer({ mode: 'copy', entries: bulkEntries })}
-            onDownloadZip={() => zip.download(bulkEntries)}
-            onDelete={() => deletes.request(bulkEntries)}
-            onClear={selection.clear}
+      {app.view === 'trash' ? (
+        <TrashView onRestored={refetch} onOpenNav={() => setNavOpen(true)} />
+      ) : (
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Toolbar
+            currentPrefix={currentPrefix}
+            rootLabel={ROOT_LABEL}
+            search={view.search}
+            searchRef={searchRef}
+            view={view.view}
+            sort={view.sort}
+            refreshing={listing.loading || listing.refreshing || health.loading}
+            onNavigate={navigateToFolder}
+            onNavigateUp={navigateUp}
+            onSearchChange={view.setSearch}
+            onViewChange={view.setView}
+            onSortChange={view.changeSort}
+            onRefresh={refresh}
+            onOpenNav={() => setNavOpen(true)}
+            dragActive={drag.dragIds !== null}
+            onDropToPrefix={drag.dropOn}
           />
 
-          <InspectorPanel
-            file={selectedFile}
-            bucket={health.health?.bucket}
-            onClose={selection.clear}
-            onDownload={downloadFile}
-            onDelete={(file) => deletes.request([{ type: 'file', id: file.key, name: file.name, file }])}
-            onTransfer={(file, mode) =>
-              transfers.openTransfer({ entry: { type: 'file', id: file.key, name: file.name, file }, mode })
-            }
+          <ClipboardBar
+            clipboard={clipboard.clipboard}
+            destination={folderLabel(currentPrefix, ROOT_LABEL)}
+            canPaste={clipboard.canPaste}
+            busy={transfers.transferring}
+            onPaste={() => clipboard.paste()}
+            onClear={clipboard.clear}
+          />
+
+          <div className="relative flex min-h-0 flex-1">
+            <EntryContextMenu items={pageMenu}>
+              <main className="min-w-0 flex-1 overflow-y-auto" aria-busy={listing.loading}>
+                <ListingState
+                  error={listing.error}
+                  loading={listing.loading}
+                  empty={view.entries.length === 0}
+                  filtered={view.filtered}
+                  view={view.view}
+                  onRetry={refetch}
+                  onClearFilters={() => {
+                    view.setSearch('');
+                    view.setFilter('all');
+                  }}
+                >
+                  <FileBrowser
+                    key={`${currentPrefix}|${view.view}`}
+                    entries={view.entries}
+                    view={view.view}
+                    selection={selection.selected}
+                    sort={view.sort}
+                    onSortChange={view.changeSort}
+                    onOpenFolder={navigateToFolder}
+                    onChoose={selection.choose}
+                    onToggleSelect={selection.toggle}
+                    onSelectRange={selection.selectRange}
+                    onSelectAll={selection.selectAll}
+                    onClearSelection={selection.clear}
+                    onGoUp={navigateUp}
+                    onReachEnd={listing.hasMore ? listing.loadMore : undefined}
+                    dragIds={drag.dragIds}
+                    busyIds={transfers.movingIds}
+                    cutIds={clipboard.cutIds}
+                    onDragStart={drag.startDrag}
+                    onDragEnd={drag.endDrag}
+                    onDropOnFolder={drag.dropOn}
+                    onDownload={downloadFile}
+                    onDownloadZip={zip.download}
+                    onCut={(entry) => clipboard.cut(targetsOf(entry))}
+                    onCopy={(entry) => clipboard.copy(targetsOf(entry))}
+                    onPasteInto={(prefix) => void clipboard.paste(prefix)}
+                    canPasteInto={clipboard.canPasteInto}
+                    onDelete={(entry) => void trash.request([entry])}
+                    onTransfer={(entry, mode) => transfers.openTransfer({ entry, mode })}
+                  />
+                </ListingState>
+                {!listing.loading && !listing.error && (
+                  <LoadMore
+                    hasMore={listing.hasMore}
+                    loading={listing.loadingMore}
+                    error={listing.loadMoreError}
+                    loadedCount={view.allEntries.length}
+                    onLoadMore={listing.loadMore}
+                  />
+                )}
+              </main>
+            </EntryContextMenu>
+
+            <BulkBar
+              entries={bulkEntries}
+              busy={deletes.deleting || trash.busy}
+              onMove={() => transfers.openBulkTransfer({ mode: 'move', entries: bulkEntries })}
+              onCopy={() => transfers.openBulkTransfer({ mode: 'copy', entries: bulkEntries })}
+              onDownloadZip={() => zip.download(bulkEntries)}
+              onDelete={() => void trash.request(bulkEntries)}
+              onClear={selection.clear}
+            />
+
+            <InspectorPanel
+              file={selectedFile}
+              bucket={health.health?.bucket}
+              onClose={selection.clear}
+              onDownload={downloadFile}
+              onDelete={(file) => void trash.request([{ type: 'file', id: file.key, name: file.name, file }])}
+              onTransfer={(file, mode) =>
+                transfers.openTransfer({ entry: { type: 'file', id: file.key, name: file.name, file }, mode })
+              }
+            />
+          </div>
+
+          <StatusBar
+            folderCount={data?.folders.length ?? 0}
+            fileCount={data?.objects.length ?? 0}
+            totalSize={data?.total_size ?? 0}
+            hasMore={listing.hasMore}
+            shown={view.filtered && !listing.loading ? view.entries.length : undefined}
           />
         </div>
-
-        <StatusBar
-          folderCount={data?.folders.length ?? 0}
-          fileCount={data?.objects.length ?? 0}
-          totalSize={data?.total_size ?? 0}
-          hasMore={listing.hasMore}
-          shown={view.filtered && !listing.loading ? view.entries.length : undefined}
-        />
-      </div>
+      )}
 
       <UploadPickers
         fileInputRef={uploads.fileInputRef}

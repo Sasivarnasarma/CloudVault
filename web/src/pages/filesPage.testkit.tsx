@@ -24,6 +24,13 @@ vi.mock('../services/folderService', () => ({
   moveFolder: vi.fn(),
   fetchFolderTree: vi.fn(),
 }));
+vi.mock('../services/trashService', () => ({
+  moveToTrash: vi.fn(),
+  restoreFromTrash: vi.fn(),
+  listTrash: vi.fn(),
+  deleteFromTrash: vi.fn(),
+  emptyTrash: vi.fn(),
+}));
 vi.mock('../services/transferService', async (importActual) => ({
   ...(await importActual<typeof import('../services/transferService')>()),
   uploadFileDirect: vi.fn(),
@@ -43,6 +50,7 @@ import {
   requestPresignedDownloads,
   requestPresignedUpload,
 } from '../services/objectService';
+import { deleteFromTrash, emptyTrash, listTrash, moveToTrash, restoreFromTrash } from '../services/trashService';
 import { triggerBrowserDownload, uploadFileDirect } from '../services/transferService';
 
 export const REPORTS = makeFolder('Reports');
@@ -56,6 +64,9 @@ export const ROOT = makeListing('', [REPORTS, PHOTOS], [REPORT, PHOTO, NOTES]);
 export const INSIDE = makeListing('Reports/', [], [NESTED]);
 
 export const listMock = vi.mocked(listObjects);
+
+/** The id the mocked trash gives to every batch it makes. */
+export const BATCH_ID = '20260101T000000Z-abc123';
 
 /** Reset the service mocks to a bucket with a few files and folders. Use as `beforeEach(installPageMocks)`. */
 export function installPageMocks() {
@@ -77,6 +88,23 @@ export function installPageMocks() {
   vi.mocked(moveFolder).mockReset().mockResolvedValue({ success: true, source: '', destination: '', item_count: 2 });
   vi.mocked(copyFolder).mockReset().mockResolvedValue({ success: true, source: '', destination: '', item_count: 2 });
   vi.mocked(createFolder).mockReset().mockResolvedValue({ success: true, folder: REPORTS });
+  vi.mocked(moveToTrash)
+    .mockReset()
+    .mockImplementation(async (items) => ({
+      batch: {
+        id: BATCH_ID,
+        deleted_at: '2026-01-01T00:00:00Z',
+        total_size: items.length,
+        roots: items.map((item) => ({ ...item, size: 1, item_count: 1 })),
+      },
+      failed: [],
+    }));
+  vi.mocked(restoreFromTrash)
+    .mockReset()
+    .mockResolvedValue({ restored: ['restored'], failed: [] });
+  vi.mocked(listTrash).mockReset().mockResolvedValue({ batches: [], total_size: 0 });
+  vi.mocked(deleteFromTrash).mockReset().mockResolvedValue({ deleted_count: 1 });
+  vi.mocked(emptyTrash).mockReset().mockResolvedValue({ deleted_count: 0 });
   vi.mocked(fetchFolderTree)
     .mockReset()
     .mockImplementation(async (prefix) => ({

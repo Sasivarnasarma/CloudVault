@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -12,6 +14,7 @@ from app.schemas.storage import (
     TreeFile,
     UploadedPartInfo,
 )
+from app.schemas.trash import TrashBatch, TrashFailure, TrashRoot
 from app.services.storage.base import BaseStorageService
 from app.services.storage.exceptions import (
     ObjectExistsError,
@@ -25,6 +28,9 @@ from app.services.storage.exceptions import (
 from app.services.storage.factory import get_storage_service
 from app.services.storage.keys import normalize_folder, normalize_key
 
+BATCH = "20260101T000000Z-abc123"
+NOW = datetime(2026, 1, 1, tzinfo=UTC)
+
 
 class FakeStorage(BaseStorageService):
     def __init__(self) -> None:
@@ -33,6 +39,7 @@ class FakeStorage(BaseStorageService):
         self.existing_folders = {"taken/"}
         self.connected = True
         self.fail_with: Exception | None = None
+        self.trash_failures: list[TrashFailure] = []
 
     def check_connection(self) -> bool:
         return self.connected
@@ -136,6 +143,29 @@ class FakeStorage(BaseStorageService):
 
     def abort_multipart_upload(self, key, upload_id):
         self.calls.append(("mp_abort", f"{key}|{upload_id}"))
+
+    def move_to_trash(self, items):
+        self.calls.append(("trash", repr(items)))
+        if self.fail_with:
+            raise self.fail_with
+        roots = [TrashRoot(path=p, type=t, size=2, item_count=1) for t, p in items]
+        batch = TrashBatch(id=BATCH, deleted_at=NOW, roots=roots, total_size=2 * len(roots))
+        return batch, self.trash_failures
+
+    def list_trash(self, limit=200):
+        self.calls.append(("list_trash", str(limit)))
+        root = TrashRoot(path="a.txt", type="file", size=5, item_count=1)
+        return [TrashBatch(id=BATCH, deleted_at=NOW, roots=[root], total_size=5)]
+
+    def restore_from_trash(self, batch_id):
+        self.calls.append(("restore", batch_id))
+        if self.fail_with:
+            raise self.fail_with
+        return ["a.txt"], self.trash_failures
+
+    def purge_trash(self, batch_id=None):
+        self.calls.append(("purge", str(batch_id)))
+        return 3
 
     def list_folder_tree(self, prefix, max_files):
         self.calls.append(("tree", f"{prefix}|{max_files}"))
@@ -618,3 +648,105 @@ class TestPresignDownloads:
         res = client.post("/api/objects/presign-downloads", json={"keys": ["k"] * 100})
         assert res.status_code == 200
         assert len(res.json()["items"]) == 100
+
+
+class TestTrashRoutes:
+    def test_moves_items_to_the_trash_with_normalized_paths(self, client, storage):
+        res = client.post(
+            "/api/trash",
+            json={
+                "items": [
+                    {"path": "/docs//a.txt", "type": "file"},
+                    {"path": "/pics", "type": "folder"},
+                ]
+            },
+        )
+        assert res.status_code == 200
+        body = res.json()
+        assert body["batch"]["id"] == BATCH
+        assert [r["path"] for r in body["batch"]["roots"]] == ["docs/a.txt", "pics/"]
+        assert body["failed"] == []
+        assert ("trash", "[('file', 'docs/a.txt'), ('folder', 'pics/')]") in storage.calls
+
+    def test_drops_repeats_and_anything_inside_a_listed_folder(self, client, storage):
+        client.post(
+            "/api/trash",
+            json={
+                "items": [
+                    {"path": "pics/", "type": "folder"},
+                    {"path": "pics/a.jpg", "type": "file"},
+                    {"path": "pics/deep/", "type": "folder"},
+                    {"path": "pics", "type": "folder"},
+                    {"path": "pics2/b.jpg", "type": "file"},
+                ]
+            },
+        )
+        assert ("trash", "[('file', 'pics2/b.jpg'), ('folder', 'pics/')]") in storage.calls
+
+    def test_reports_items_that_could_not_be_moved(self, client, storage):
+        storage.trash_failures = [TrashFailure(path="big.bin", error="File is too large")]
+        res = client.post("/api/trash", json={"items": [{"path": "big.bin", "type": "file"}]})
+        assert res.json()["failed"] == [{"path": "big.bin", "error": "File is too large"}]
+
+    @pytest.mark.parametrize(
+        "item",
+        [
+            {"path": ".cloudvault-trash/x/a.txt", "type": "file"},
+            {"path": ".cloudvault-trash", "type": "folder"},
+            {"path": "", "type": "file"},
+            {"path": "/", "type": "folder"},
+            {"path": "../x", "type": "file"},
+            {"path": "dir/", "type": "file"},
+        ],
+    )
+    def test_rejects_the_trash_itself_and_invalid_paths(self, client, item):
+        assert client.post("/api/trash", json={"items": [item]}).status_code == 400
+
+    @pytest.mark.parametrize(
+        "items",
+        [
+            [],
+            [{"path": "a", "type": "link"}],
+            [{"path": "a.txt", "type": "file"}] * 201,
+            [{"type": "file"}],
+        ],
+    )
+    def test_validates_the_request(self, client, items):
+        assert client.post("/api/trash", json={"items": items}).status_code == 422
+
+    def test_lists_the_trash_with_its_total_size(self, client):
+        res = client.get("/api/trash")
+        assert res.status_code == 200
+        body = res.json()
+        assert body["total_size"] == 5
+        assert body["batches"][0]["id"] == BATCH
+        assert body["batches"][0]["roots"][0]["type"] == "file"
+
+    def test_restores_a_batch(self, client, storage):
+        res = client.post(f"/api/trash/{BATCH}/restore")
+        assert res.json() == {"restored": ["a.txt"], "failed": []}
+        assert ("restore", BATCH) in storage.calls
+
+    def test_restore_passes_on_what_could_not_go_back(self, client, storage):
+        storage.trash_failures = [TrashFailure(path="a.txt", error="Something already exists")]
+        assert client.post(f"/api/trash/{BATCH}/restore").json()["failed"][0]["path"] == "a.txt"
+
+    def test_restoring_a_missing_batch_is_404(self, client, storage):
+        storage.fail_with = ObjectNotFoundError("That item is no longer in the trash")
+        assert client.post(f"/api/trash/{BATCH}/restore").status_code == 404
+
+    @pytest.mark.parametrize(
+        "batch_id", ["nope", "2026-01-01", "20260101T000000Z-ABCDEF", "x" * 40]
+    )
+    def test_rejects_malformed_batch_ids(self, client, batch_id):
+        assert client.post(f"/api/trash/{batch_id}/restore").status_code == 422
+        assert client.delete(f"/api/trash/{batch_id}").status_code == 422
+
+    def test_deletes_one_batch_for_good(self, client, storage):
+        res = client.delete(f"/api/trash/{BATCH}")
+        assert res.json() == {"deleted_count": 3}
+        assert ("purge", BATCH) in storage.calls
+
+    def test_empties_the_trash(self, client, storage):
+        assert client.delete("/api/trash").json() == {"deleted_count": 3}
+        assert ("purge", "None") in storage.calls

@@ -42,3 +42,25 @@ def test_normalize_prefix_root_is_empty():
     assert normalize_prefix("a/b") == "a/b/"
     with pytest.raises(InvalidKeyError):
         normalize_prefix("a/..")
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        ".cloudvault-trash",
+        ".cloudvault-trash/",
+        ".cloudvault-trash/x/a.txt",
+        "/.cloudvault-trash//a",
+    ],
+)
+def test_the_trash_is_reserved_for_every_kind_of_key(raw):
+    for normalize in (normalize_key, normalize_folder, normalize_prefix):
+        with pytest.raises(InvalidKeyError, match="reserved|cannot end with"):
+            normalize(raw)
+
+
+@pytest.mark.parametrize(
+    "raw", [".cloudvault-trash-backup/a", "docs/.cloudvault-trash/a", "x.cloudvault-trash"]
+)
+def test_names_that_only_look_like_the_trash_are_fine(raw):
+    assert normalize_key(raw) == raw

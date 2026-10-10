@@ -14,6 +14,8 @@ export type ActionId =
   | 'selectAll'
   | 'invertSelection'
   | 'deleteSelected'
+  | 'deleteForever'
+  | 'undo'
   | 'rename'
   | 'download'
   | 'copy'
@@ -65,7 +67,9 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { group: 'Work with items', label: 'Copy', chords: ['mod+c'], action: 'copy' },
   { group: 'Work with items', label: 'Cut', chords: ['mod+x'], action: 'cut' },
   { group: 'Work with items', label: 'Paste here', chords: ['mod+v'], action: 'paste' },
-  { group: 'Work with items', label: 'Delete', chords: ['Delete', 'shift+Delete'], action: 'deleteSelected' },
+  { group: 'Work with items', label: 'Move to trash', chords: ['Delete'], action: 'deleteSelected' },
+  { group: 'Work with items', label: 'Delete forever', chords: ['shift+Delete'], action: 'deleteForever' },
+  { group: 'Work with items', label: 'Undo the last delete', chords: ['mod+z'], action: 'undo' },
   {
     group: 'Work with items',
     label: 'Open the item’s menu',

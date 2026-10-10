@@ -38,7 +38,7 @@ describe('BulkBar', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Move to…' }));
     await userEvent.click(screen.getByRole('button', { name: 'Copy to…' }));
     await userEvent.click(screen.getByRole('button', { name: 'Download as zip' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Move to trash' }));
     await userEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
     expect([h.onMove, h.onCopy, h.onDownloadZip, h.onDelete, h.onClear].map((fn) => fn.mock.calls.length)).toEqual([
       1, 1, 1, 1, 1,
@@ -47,7 +47,7 @@ describe('BulkBar', () => {
 
   it('disables the actions while one is running', () => {
     setup([file('a'), file('b')], true);
-    for (const name of ['Move to…', 'Copy to…', 'Download as zip', 'Delete']) {
+    for (const name of ['Move to…', 'Copy to…', 'Download as zip', 'Move to trash']) {
       expect(screen.getByRole('button', { name })).toBeDisabled();
     }
   });

@@ -1,4 +1,4 @@
-import { installPageMocks, renderPage, listMock, ROOT } from './filesPage.testkit';
+import { BATCH_ID, installPageMocks, renderPage, listMock, ROOT } from './filesPage.testkit';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +10,7 @@ import {
   requestPresignedDownloads,
   requestPresignedUpload,
 } from '../services/objectService';
+import { listTrash, moveToTrash, restoreFromTrash } from '../services/trashService';
 import { triggerBrowserDownload, uploadFileDirect } from '../services/transferService';
 import { FilesPage } from './FilesPage';
 import type { ObjectListResponse } from '../types';
@@ -128,50 +129,60 @@ describe('FilesPage', () => {
     expect(requestPresignedDownload).toHaveBeenCalledWith('report.pdf', 'report.pdf');
   });
 
-  it('deletes a file only after confirmation, then refreshes the listing', async () => {
+  it('moves a file to the trash at once, refreshes the listing and offers Undo', async () => {
     const user = await renderPage();
     await user.click(screen.getByText('report.pdf'));
-    await user.click(await screen.findByRole('button', { name: 'Delete file' }));
-
-    const dialog = await screen.findByRole('dialog', { name: 'Delete file?' });
-    expect(deleteObject).not.toHaveBeenCalled();
-
     const callsBefore = listMock.mock.calls.length;
-    await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
-    await waitFor(() => expect(deleteObject).toHaveBeenCalledWith('report.pdf'));
-    await waitFor(() => expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-  });
+    await user.click(await screen.findByRole('button', { name: 'Move to trash' }));
 
-  it('does nothing when the delete confirmation is cancelled', async () => {
-    const user = await renderPage();
-    await user.click(screen.getByText('report.pdf'));
-    await user.click(await screen.findByRole('button', { name: 'Delete file' }));
-    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }));
-
+    await waitFor(() => expect(moveToTrash).toHaveBeenCalledWith([{ path: 'report.pdf', type: 'file' }]));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(); // no confirmation: it can be undone
     expect(deleteObject).not.toHaveBeenCalled();
+    expect(await screen.findByText('Moved 1 file to the trash')).toBeInTheDocument();
+    await waitFor(() => expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore));
+
+    await user.click(await screen.findByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(restoreFromTrash).toHaveBeenCalledWith(BATCH_ID));
+    expect(await screen.findByText('Restored 1 item')).toBeInTheDocument();
   });
 
-  it('deletes a folder recursively after confirmation', async () => {
+  it('moves a folder to the trash from its menu', async () => {
     const user = await renderPage();
     await user.click(screen.getByRole('button', { name: 'More actions for Reports' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Delete folder' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Move to trash' }));
 
-    const dialog = await screen.findByRole('dialog', { name: 'Delete folder?' });
-    expect(dialog).toHaveTextContent('everything inside it');
-    await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
-    await waitFor(() => expect(deleteFolder).toHaveBeenCalledWith('Reports/'));
+    await waitFor(() => expect(moveToTrash).toHaveBeenCalledWith([{ path: 'Reports/', type: 'folder' }]));
+    expect(deleteFolder).not.toHaveBeenCalled();
+    expect(await screen.findByText('Moved 1 folder to the trash')).toBeInTheDocument();
   });
 
-  it('keeps the dialog open and the file in place when deletion fails', async () => {
-    vi.mocked(deleteObject).mockRejectedValueOnce(new Error('Storage failed while deleting object'));
+  it('says why a file could not be moved to the trash and offers to delete it for good', async () => {
+    vi.mocked(moveToTrash).mockResolvedValue({
+      batch: null,
+      failed: [{ path: 'report.pdf', error: 'The object is too large to copy in one step' }],
+    });
     const user = await renderPage();
     await user.click(screen.getByText('report.pdf'));
-    await user.click(await screen.findByRole('button', { name: 'Delete file' }));
-    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
+    await user.click(await screen.findByRole('button', { name: 'Move to trash' }));
 
-    await waitFor(() => expect(deleteObject).toHaveBeenCalled());
-    expect(screen.getByRole('dialog', { name: 'Delete file?' })).toBeInTheDocument();
+    expect(await screen.findByText('Couldn’t move “report.pdf” to the trash')).toBeInTheDocument();
+    expect(screen.getByText('The object is too large to copy in one step')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Delete forever…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete file?' });
+    expect(deleteObject).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(deleteObject).toHaveBeenCalledWith('report.pdf'));
+  });
+
+  it('reports a trash request that fails and leaves the file where it is', async () => {
+    vi.mocked(moveToTrash).mockRejectedValue(new Error('Storage service is unavailable'));
+    const user = await renderPage();
+    await user.click(screen.getByText('report.pdf'));
+    await user.click(await screen.findByRole('button', { name: 'Move to trash' }));
+
+    expect(await screen.findByText('Storage service is unavailable')).toBeInTheDocument();
     expect(screen.getByText('report.pdf', { selector: 'span' })).toBeInTheDocument();
   });
 
@@ -293,5 +304,78 @@ describe('FilesPage zip download', () => {
     await user.click(screen.getByRole('button', { name: 'More actions for report.pdf' }));
     await screen.findByRole('menuitem', { name: 'Download' });
     expect(screen.queryByRole('menuitem', { name: 'Download as zip' })).not.toBeInTheDocument();
+  });
+});
+
+describe('FilesPage trash', () => {
+  const BATCH = {
+    id: BATCH_ID,
+    deleted_at: new Date(Date.now() - 60_000).toISOString(),
+    total_size: 5,
+    roots: [{ path: 'gone.txt', type: 'file' as const, size: 5, item_count: 1 }],
+  };
+
+  beforeEach(() => {
+    window.history.replaceState(null, '', '/');
+    vi.mocked(listTrash).mockResolvedValue({ batches: [BATCH], total_size: 5 });
+  });
+
+  it('opens the trash from the sidebar and comes back to the same folder', async () => {
+    window.history.replaceState(null, '', '/?p=Reports');
+    const user = userEvent.setup();
+    render(<FilesPage />);
+    await screen.findByText('q1.pdf');
+
+    await user.click(screen.getAllByRole('button', { name: 'Trash' })[0]);
+    expect(await screen.findByRole('heading', { name: 'Trash' })).toBeInTheDocument();
+    expect(await screen.findByText('gone.txt')).toBeInTheDocument();
+    expect(window.location.search).toBe('?view=trash');
+    expect(screen.queryByText('q1.pdf')).not.toBeInTheDocument();
+
+    await user.click(screen.getAllByRole('button', { name: /^All files/ })[0]);
+    expect(await screen.findByText('q1.pdf')).toBeInTheDocument(); // the folder that was open
+    expect(screen.queryByRole('heading', { name: 'Trash' })).not.toBeInTheDocument();
+  });
+
+  it('opens straight in the trash when the address asks for it, and the back button leaves it', async () => {
+    window.history.replaceState(null, '', '/?p=Reports');
+    window.history.pushState(null, '', '/?view=trash');
+    render(<FilesPage />);
+    expect(await screen.findByRole('heading', { name: 'Trash' })).toBeInTheDocument();
+
+    window.history.back();
+    expect(await screen.findByText('q1.pdf')).toBeInTheDocument();
+  });
+
+  it('shows the files again after restoring', async () => {
+    const user = userEvent.setup();
+    window.history.pushState(null, '', '/?view=trash');
+    render(<FilesPage />);
+    await screen.findByText('gone.txt');
+    const callsBefore = listMock.mock.calls.length;
+
+    await user.click(screen.getByRole('button', { name: 'Restore' }));
+    await waitFor(() => expect(restoreFromTrash).toHaveBeenCalledWith(BATCH_ID));
+    await waitFor(() => expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore));
+  });
+
+  it('does not let file shortcuts act on files that are not on screen', async () => {
+    const user = await renderPage();
+    await user.click(screen.getByRole('checkbox', { name: 'Select notes.md' }));
+    await user.click(screen.getAllByRole('button', { name: 'Trash' })[0]);
+    await screen.findByText('gone.txt');
+
+    await user.keyboard('{Delete}');
+    await user.keyboard('{Control>}a{/Control}');
+    expect(moveToTrash).not.toHaveBeenCalled();
+    expect(deleteObject).not.toHaveBeenCalled();
+  });
+
+  it('marks the trash as the current place in the sidebar', async () => {
+    const user = await renderPage();
+    const link = () => screen.getAllByRole('button', { name: 'Trash' })[0];
+    expect(link()).not.toHaveAttribute('aria-current');
+    await user.click(link());
+    expect(link()).toHaveAttribute('aria-current', 'page');
   });
 });

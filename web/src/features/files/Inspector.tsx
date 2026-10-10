@@ -109,7 +109,7 @@ export function Inspector({ file, bucket, onClose, onDownload, onDelete, onTrans
             Download
           </Button>
           <IconButton
-            label="Delete file"
+            label="Move to trash"
             className="border border-line-strong text-danger hover:bg-danger-soft hover:text-danger"
             onClick={() => onDelete(file)}
           >

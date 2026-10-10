@@ -15,6 +15,7 @@ from app.schemas.storage import (
     TreeFile,
     UploadedPartInfo,
 )
+from app.schemas.trash import TrashBatch, TrashFailure
 from app.services.storage.base import BaseStorageService
 from app.services.storage.exceptions import (
     InvalidKeyError,
@@ -24,7 +25,12 @@ from app.services.storage.exceptions import (
     StorageError,
     UploadIncompleteError,
 )
-from app.services.storage.keys import normalize_folder, normalize_key, normalize_prefix
+from app.services.storage.keys import (
+    TRASH_PREFIX,
+    normalize_folder,
+    normalize_key,
+    normalize_prefix,
+)
 from app.services.storage.s3.errors import (
     NOT_FOUND_CODES,
     error_code,
@@ -37,6 +43,7 @@ from app.services.storage.s3.naming import (
     display_name,
     guess_content_type,
 )
+from app.services.storage.s3.trash import S3Trash
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +75,7 @@ class S3StorageService(BaseStorageService):
             client_kwargs["endpoint_url"] = settings.S3_ENDPOINT
 
         self.client = boto3.client(**client_kwargs)
+        self._trash = S3Trash(self)
 
     # --- shared helpers -------------------------------------------------------------
 
@@ -121,9 +129,11 @@ class S3StorageService(BaseStorageService):
 
     @staticmethod
     def _to_folders(common_prefixes: list[dict]) -> list[FolderItem]:
+        # The trash lives in the bucket but is not a folder the user can open.
         return [
             FolderItem(name=display_name(cp["Prefix"]), prefix=cp["Prefix"])
             for cp in common_prefixes
+            if cp["Prefix"] != TRASH_PREFIX
         ]
 
     @staticmethod
@@ -353,6 +363,22 @@ class S3StorageService(BaseStorageService):
                 f"The folder was copied, but {len(failed)} original items could not be removed"
             )
         return len(keys)
+
+    # --- trash ----------------------------------------------------------------------
+
+    def move_to_trash(
+        self, items: list[tuple[str, str]]
+    ) -> tuple[TrashBatch | None, list[TrashFailure]]:
+        return self._trash.move_to_trash(items)
+
+    def list_trash(self, limit: int = 200) -> list[TrashBatch]:
+        return self._trash.list_trash(limit)
+
+    def restore_from_trash(self, batch_id: str) -> tuple[list[str], list[TrashFailure]]:
+        return self._trash.restore_from_trash(batch_id)
+
+    def purge_trash(self, batch_id: str | None = None) -> int:
+        return self._trash.purge_trash(batch_id)
 
     # --- presigned upload -----------------------------------------------------------
 

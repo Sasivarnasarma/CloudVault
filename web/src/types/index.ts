@@ -113,3 +113,48 @@ export interface MultipartCompleteResponse {
   key: string;
   etag?: string | null;
 }
+
+export interface TrashItemRequest {
+  path: string;
+  type: 'file' | 'folder';
+}
+
+/** A file or folder that was deleted, as it was. */
+export interface TrashRoot extends TrashItemRequest {
+  size: number;
+  /** Files inside it; 1 for a file. */
+  item_count: number;
+}
+
+export interface TrashFailure {
+  path: string;
+  error: string;
+}
+
+/** Everything deleted by one action. It is restored or removed together. */
+export interface TrashBatch {
+  id: string;
+  deleted_at: string;
+  roots: TrashRoot[];
+  total_size: number;
+}
+
+export interface TrashMoveResponse {
+  /** Null when nothing could be moved. */
+  batch: TrashBatch | null;
+  failed: TrashFailure[];
+}
+
+export interface TrashListResponse {
+  batches: TrashBatch[];
+  total_size: number;
+}
+
+export interface TrashRestoreResponse {
+  restored: string[];
+  failed: TrashFailure[];
+}
+
+export interface TrashPurgeResponse {
+  deleted_count: number;
+}

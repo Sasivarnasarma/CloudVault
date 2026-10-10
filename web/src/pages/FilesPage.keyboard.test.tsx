@@ -1,9 +1,10 @@
-import { installPageMocks, renderPage, listMock } from './filesPage.testkit';
+import { BATCH_ID, installPageMocks, renderPage, listMock } from './filesPage.testkit';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchFolderTree } from '../services/folderService';
 import { deleteObject, requestPresignedDownload } from '../services/objectService';
+import { moveToTrash, restoreFromTrash } from '../services/trashService';
 import { triggerBrowserDownload } from '../services/transferService';
 import { FilesPage } from './FilesPage';
 
@@ -72,13 +73,13 @@ describe('FilesPage keyboard navigation', () => {
     expect(screen.getByText('q1.pdf')).toBeInTheDocument();
   });
 
-  it('lets the arrow keys and Delete work together: select with the arrows, delete with Delete', async () => {
+  it('lets the arrow keys and Delete work together: select with the arrows, trash with Delete', async () => {
     const user = await renderPage();
     item('Photos').focus();
     await user.keyboard('{ArrowDown}{ArrowDown}');
     await user.keyboard('{Delete}');
-    expect(await screen.findByRole('dialog', { name: 'Delete file?' })).toBeInTheDocument();
-    expect(screen.getByRole('dialog')).toHaveTextContent('notes.md');
+    await waitFor(() => expect(moveToTrash).toHaveBeenCalledWith([{ path: 'notes.md', type: 'file' }]));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
 
@@ -122,12 +123,27 @@ describe('FilesPage keyboard shortcuts', () => {
     await waitFor(() => expect(triggerBrowserDownload).toHaveBeenCalledWith('https://storage.test/get'));
   });
 
-  it('deletes with Delete and Shift+Delete, after confirmation', async () => {
+  it('moves to the trash with Delete, and deletes for good with Shift+Delete after confirmation', async () => {
     const user = await renderPage();
     await select(user, 'notes.md');
     await user.keyboard('{Shift>}{Delete}{/Shift}');
     expect(await screen.findByRole('dialog', { name: 'Delete file?' })).toBeInTheDocument();
     expect(deleteObject).not.toHaveBeenCalled();
+    expect(moveToTrash).not.toHaveBeenCalled();
+  });
+
+  it('undoes the last delete with Ctrl+Z, once, and ignores Ctrl+Z when there is nothing to undo', async () => {
+    const user = await renderPage();
+    await user.keyboard('{Control>}z{/Control}');
+    expect(restoreFromTrash).not.toHaveBeenCalled();
+
+    await select(user, 'notes.md');
+    await user.keyboard('{Delete}');
+    await screen.findByText('Moved 1 file to the trash');
+    await user.keyboard('{Control>}z{/Control}');
+    await waitFor(() => expect(restoreFromTrash).toHaveBeenCalledWith(BATCH_ID));
+    await user.keyboard('{Control>}z{/Control}');
+    expect(restoreFromTrash).toHaveBeenCalledTimes(1);
   });
 
   it('opens the new folder dialog with Alt+N', async () => {
