@@ -21,6 +21,8 @@ export function useHealth() {
   }, []);
 
   useEffect(() => {
+    // Loads data: state changes when the request settles.
+    // oxlint-disable-next-line react/set-state-in-effect
     reload();
   }, [reload]);
 

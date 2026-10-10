@@ -54,15 +54,28 @@ export function useObjects() {
   const cursorRef = useRef<string | null>(null);
   const loadingMoreRef = useRef(false);
 
-  const fetchListing = useCallback(async (prefix: string) => {
-    const requestId = ++latestRequest.current;
-    cursorRef.current = null;
-    loadingMoreRef.current = false;
+  /** Show the "loading" state again and forget what the previous request left behind. */
+  const resetListingState = useCallback(() => {
     setLoading(true);
     setError(null);
     setHasMore(false);
     setLoadingMore(false);
     setLoadMoreError(null);
+  }, []);
+
+  // Moving to another folder starts over. Done while rendering, so the old folder's listing is never
+  // shown under the new folder's name.
+  const [shownPrefix, setShownPrefix] = useState(currentPrefix);
+  if (shownPrefix !== currentPrefix) {
+    setShownPrefix(currentPrefix);
+    resetListingState();
+  }
+
+  /** Load the first page of a folder. Only the latest request may update state. */
+  const fetchListing = useCallback(async (prefix: string) => {
+    const requestId = ++latestRequest.current;
+    cursorRef.current = null;
+    loadingMoreRef.current = false;
     try {
       const result = await listObjects(prefix, { limit: PAGE_SIZE });
       if (requestId !== latestRequest.current) return;
@@ -105,6 +118,8 @@ export function useObjects() {
 
   useEffect(() => {
     prefixRef.current = currentPrefix;
+    // Loads data: state changes when the request settles (the reset for a new folder happens above).
+    // oxlint-disable-next-line react/set-state-in-effect
     fetchListing(currentPrefix);
   }, [currentPrefix, fetchListing]);
 
@@ -130,8 +145,9 @@ export function useObjects() {
   }, [navigateToFolder]);
 
   const refetch = useCallback(() => {
+    resetListingState();
     fetchListing(prefixRef.current);
-  }, [fetchListing]);
+  }, [fetchListing, resetListingState]);
 
   return {
     currentPrefix,

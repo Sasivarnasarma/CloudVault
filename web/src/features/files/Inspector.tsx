@@ -17,14 +17,13 @@ interface InspectorProps {
   onTransfer: (file: FileObject, mode: TransferMode) => void;
 }
 
+/** A preview of an image. Give it `key={file.key}` so each file starts with a clean state. */
 function ImagePreview({ file }: { file: FileObject }) {
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    setSrc(null);
-    setFailed(false);
     requestPresignedDownload(file.key)
       .then((res) => !cancelled && setSrc(res.download_url))
       .catch(() => !cancelled && setFailed(true));
@@ -92,7 +91,7 @@ export function Inspector({ file, bucket, onClose, onDownload, onDelete, onTrans
 
       <div className="flex-1 overflow-y-auto p-5">
         {isImage ? (
-          <ImagePreview file={file} />
+          <ImagePreview key={file.key} file={file} />
         ) : (
           <div className="mb-5 flex aspect-4/3 items-center justify-center rounded-xl border border-line bg-sunken">
             <FileIcon file={file} size="lg" />

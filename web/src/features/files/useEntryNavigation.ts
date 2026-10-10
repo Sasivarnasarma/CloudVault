@@ -177,9 +177,13 @@ export function useEntryNavigation(options: Options) {
     };
   }, []);
 
+  // Whether the keyboard focus is in the list, to put it back if the focused item is deleted or moved away.
+  const hasFocus = useRef(false);
+
   /** Focus moving onto an item (by mouse or Tab) makes it the cursor. */
   const onFocus = useCallback(
     (e: FocusEvent<HTMLElement>) => {
+      hasFocus.current = true;
       const row = (e.target as HTMLElement).closest<HTMLElement>(ITEM);
       const id = row?.dataset.entryId;
       if (!id || cursor?.id === id) return;
@@ -188,5 +192,22 @@ export function useEntryNavigation(options: Options) {
     [cursor, entries],
   );
 
-  return { tabStopId, onFocus };
+  /** Focus leaving for somewhere else ends it; a dialog or menu opened from the list does not. */
+  const onBlur = useCallback((e: FocusEvent<HTMLElement>) => {
+    const next = e.relatedTarget as HTMLElement | null;
+    if (next && !e.currentTarget.contains(next) && !next.closest('[role="dialog"], [role="menu"]')) {
+      hasFocus.current = false;
+    }
+  }, []);
+
+  // When the item that had the focus is gone, its element is removed and the focus falls back to the
+  // page. Put it on the item that took its place, so the keyboard carries on where it left off.
+  useEffect(() => {
+    const root = options.containerRef.current;
+    if (!root || !hasFocus.current || !tabStopId) return;
+    if (document.activeElement && document.activeElement !== document.body) return;
+    findItem(root, tabStopId)?.querySelector<HTMLElement>(ITEM_MAIN)?.focus();
+  }, [entries, tabStopId, options.containerRef]);
+
+  return { tabStopId, onFocus, onBlur };
 }

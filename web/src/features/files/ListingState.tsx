@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Button } from '../../components/common/Button';
 import { StateMessage } from '../../components/common/StateMessage';
 import { EmptyFolderState } from './EmptyFolderState';
-import type { ViewMode } from './FileBrowser';
+import type { ViewMode } from './browserTypes';
 import { FileSkeleton } from './FileSkeleton';
 
 interface ListingStateProps {

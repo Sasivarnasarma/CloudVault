@@ -5,7 +5,7 @@ import { useDropTarget } from '../../hooks/useDropTarget';
 import { cn } from '../../lib/cn';
 import { parentPrefix } from '../../lib/paths';
 import type { SortDir, SortKey } from '../../lib/entries';
-import type { ViewMode } from '../../features/files/FileBrowser';
+import type { ViewMode } from '../../features/files/browserTypes';
 import { Breadcrumbs } from '../common/Breadcrumbs';
 import { Kbd } from '../common/Kbd';
 import { IconButton } from '../common/Button';
@@ -63,30 +63,45 @@ function UpButton({
   );
 }
 
-export function Toolbar(props: ToolbarProps) {
-  const { view, sort, search } = props;
-
+export function Toolbar({
+  currentPrefix,
+  dragActive,
+  onDropToPrefix,
+  onNavigate,
+  onNavigateUp,
+  onOpenNav,
+  onRefresh,
+  onSearchChange,
+  onSortChange,
+  onViewChange,
+  refreshing,
+  rootLabel,
+  search,
+  searchRef,
+  sort,
+  view,
+}: ToolbarProps) {
   return (
     <div className="flex flex-col gap-2 border-b border-line bg-canvas/80 px-4 py-3 backdrop-blur sm:px-5">
       <div className="flex items-center gap-1.5">
-        <IconButton label="Open navigation" className="lg:hidden" onClick={props.onOpenNav}>
+        <IconButton label="Open navigation" className="lg:hidden" onClick={onOpenNav}>
           <Menu className="size-5" />
         </IconButton>
         <UpButton
-          currentPrefix={props.currentPrefix}
-          dragActive={props.dragActive}
-          onNavigateUp={props.onNavigateUp}
-          onDropToPrefix={props.onDropToPrefix}
+          currentPrefix={currentPrefix}
+          dragActive={dragActive}
+          onNavigateUp={onNavigateUp}
+          onDropToPrefix={onDropToPrefix}
         />
         <Breadcrumbs
-          currentPrefix={props.currentPrefix}
-          rootLabel={props.rootLabel}
-          onNavigate={props.onNavigate}
-          dragActive={props.dragActive}
-          onDropToPrefix={props.onDropToPrefix}
+          currentPrefix={currentPrefix}
+          rootLabel={rootLabel}
+          onNavigate={onNavigate}
+          dragActive={dragActive}
+          onDropToPrefix={onDropToPrefix}
         />
-        <IconButton label="Refresh" onClick={props.onRefresh}>
-          <RefreshCw className={cn('size-4', props.refreshing && 'animate-spin')} />
+        <IconButton label="Refresh" onClick={onRefresh}>
+          <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
         </IconButton>
       </div>
 
@@ -94,10 +109,10 @@ export function Toolbar(props: ToolbarProps) {
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
           <input
-            ref={props.searchRef}
+            ref={searchRef}
             type="search"
             value={search}
-            onChange={(e) => props.onSearchChange(e.target.value)}
+            onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search this folder"
             aria-label="Search this folder"
             className="h-9 w-full rounded-lg border border-line bg-surface pl-9 pr-16 text-sm text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 [&::-webkit-search-cancel-button]:hidden"
@@ -105,7 +120,7 @@ export function Toolbar(props: ToolbarProps) {
           {search ? (
             <button
               type="button"
-              onClick={() => props.onSearchChange('')}
+              onClick={() => onSearchChange('')}
               aria-label="Clear search"
               className="absolute right-2 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-3 hover:bg-sunken hover:text-ink"
             >
@@ -133,18 +148,14 @@ export function Toolbar(props: ToolbarProps) {
                 Sort by
               </DropdownMenu.Label>
               {SORT_OPTIONS.map((opt) => (
-                <DropdownMenu.Item key={opt.key} className={menuItemClass} onSelect={() => props.onSortChange(opt.key)}>
+                <DropdownMenu.Item key={opt.key} className={menuItemClass} onSelect={() => onSortChange(opt.key)}>
                   <span className="flex-1">{opt.label}</span>
                   {sort.key === opt.key && <Check className="size-4 text-accent" />}
                 </DropdownMenu.Item>
               ))}
               <DropdownMenu.Separator className="my-1 h-px bg-line" />
               {(['asc', 'desc'] as const).map((dir) => (
-                <DropdownMenu.Item
-                  key={dir}
-                  className={menuItemClass}
-                  onSelect={() => props.onSortChange(sort.key, dir)}
-                >
+                <DropdownMenu.Item key={dir} className={menuItemClass} onSelect={() => onSortChange(sort.key, dir)}>
                   <span className="flex-1">{dir === 'asc' ? 'Ascending' : 'Descending'}</span>
                   {sort.dir === dir && <Check className="size-4 text-accent" />}
                 </DropdownMenu.Item>
@@ -166,7 +177,7 @@ export function Toolbar(props: ToolbarProps) {
               aria-label={label}
               title={label}
               aria-pressed={view === id}
-              onClick={() => props.onViewChange(id)}
+              onClick={() => onViewChange(id)}
               className={cn(
                 'inline-flex size-8 items-center justify-center rounded-md transition',
                 view === id ? 'bg-surface-2 text-ink shadow-card' : 'text-ink-3 hover:text-ink',

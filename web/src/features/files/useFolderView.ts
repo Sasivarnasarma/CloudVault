@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { sortEntries, type Entry, type SortDir, type SortKey } from '../../lib/entries';
 import { categoryOf, matchesFilter, type CategoryFilter } from '../../lib/fileKind';
 import type { ObjectListResponse } from '../../types';
-import type { ViewMode } from './FileBrowser';
+import type { ViewMode } from './browserTypes';
 
 const VIEW_KEY = 'cloudvault_view';
 
@@ -32,10 +32,12 @@ export function useFolderView(data: ObjectListResponse | null, currentPrefix: st
     }
   }, [view]);
 
-  // A search belongs to the folder it was typed in.
-  useEffect(() => {
+  // A search belongs to the folder it was typed in, so moving to another folder clears it.
+  const [searchPrefix, setSearchPrefix] = useState(currentPrefix);
+  if (searchPrefix !== currentPrefix) {
+    setSearchPrefix(currentPrefix);
     setSearch('');
-  }, [currentPrefix]);
+  }
 
   /** Every entry of the folder, folders first, as loaded. */
   const allEntries = useMemo<Entry[]>(() => {

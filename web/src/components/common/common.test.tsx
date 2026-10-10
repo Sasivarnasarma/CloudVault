@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { entryDragData } from '../../test/dataTransfer';
 import { Breadcrumbs } from './Breadcrumbs';
 import { Button, IconButton } from './Button';
+import { Checkbox } from './Checkbox';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Kbd, KeyCombo } from './Kbd';
 import { Spinner } from './Spinner';
@@ -191,5 +192,35 @@ describe('StateMessage', () => {
   it('styles an error differently from an empty state', () => {
     const { container } = render(<StateMessage icon={FolderOpen} tone="danger" title="Oops" description="Failed" />);
     expect(container.querySelector('.bg-danger-soft')).not.toBeNull();
+  });
+});
+
+describe('Checkbox', () => {
+  it('is a checkbox that reports its state and its name', () => {
+    render(<Checkbox checked label="Select a.txt" onChange={() => {}} />);
+    expect(screen.getByRole('checkbox', { name: 'Select a.txt' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('can be partly checked', () => {
+    render(<Checkbox checked={false} indeterminate label="Select all" onChange={() => {}} />);
+    expect(screen.getByRole('checkbox', { name: 'Select all' })).toHaveAttribute('aria-checked', 'mixed');
+  });
+
+  it('changes on click without passing the click on to what it sits in', async () => {
+    const onChange = vi.fn();
+    const onParentClick = vi.fn();
+    render(
+      <div onClick={onParentClick}>
+        <Checkbox checked={false} label="Select a.txt" onChange={onChange} />
+      </div>,
+    );
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select a.txt' }));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onParentClick).not.toHaveBeenCalled();
+  });
+
+  it('can be left out of the tab order', () => {
+    render(<Checkbox checked={false} label="Select a.txt" onChange={() => {}} tabbable={false} />);
+    expect(screen.getByRole('checkbox')).toHaveAttribute('tabindex', '-1');
   });
 });
