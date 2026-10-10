@@ -16,6 +16,9 @@ export type ActionId =
   | 'deleteSelected'
   | 'rename'
   | 'download'
+  | 'copy'
+  | 'cut'
+  | 'paste'
   | 'newFolder'
   | 'upload'
   | 'uploadFolder'
@@ -54,6 +57,9 @@ export const SHORTCUTS: readonly Shortcut[] = [
 
   { group: 'Work with items', label: 'Rename', chords: ['F2'], action: 'rename' },
   { group: 'Work with items', label: 'Download', chords: ['mod+d'], action: 'download' },
+  { group: 'Work with items', label: 'Copy', chords: ['mod+c'], action: 'copy' },
+  { group: 'Work with items', label: 'Cut', chords: ['mod+x'], action: 'cut' },
+  { group: 'Work with items', label: 'Paste here', chords: ['mod+v'], action: 'paste' },
   { group: 'Work with items', label: 'Delete', chords: ['Delete', 'shift+Delete'], action: 'deleteSelected' },
   { group: 'Work with items', label: 'Open the item’s menu', chords: ['shift+F10', 'ContextMenu'], action: 'contextMenu' },
 

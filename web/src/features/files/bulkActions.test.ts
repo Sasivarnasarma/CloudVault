@@ -86,6 +86,13 @@ describe('transferEntry', () => {
     expect(moveObject).toHaveBeenLastCalledWith('x.txt', 'deep/er/x.txt', false);
   });
 
+  it('can put the item under another name, for a copy made next to the original', async () => {
+    await transferEntry(file('a/x.txt'), 'copy', 'a/', false, 'x (copy).txt');
+    expect(copyObject).toHaveBeenCalledWith('a/x.txt', 'a/x (copy).txt', false);
+    await transferEntry(folder('Photos', 'a/'), 'copy', 'a/', false, 'Photos (copy)');
+    expect(copyFolder).toHaveBeenCalledWith('a/Photos/', 'a/Photos (copy)');
+  });
+
   it('moves and copies folders without a trailing slash on the target', async () => {
     await transferEntry(folder('Photos', 'a/'), 'move', 'b/', false);
     expect(moveFolder).toHaveBeenCalledWith('a/Photos/', 'b/Photos');

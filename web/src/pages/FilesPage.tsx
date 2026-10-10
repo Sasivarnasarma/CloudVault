@@ -8,6 +8,7 @@ import { Sidebar } from '../components/layout/Sidebar';
 import { Toolbar } from '../components/layout/Toolbar';
 import { EmptyFolderState } from '../features/files/EmptyFolderState';
 import { BulkBar } from '../features/files/BulkBar';
+import { ClipboardBar } from '../features/files/ClipboardBar';
 import { BulkTransferDialog, type BulkTransferTarget } from '../features/files/BulkTransferDialog';
 import { FileBrowser, type ViewMode } from '../features/files/FileBrowser';
 import { FileSkeleton } from '../features/files/FileSkeleton';
@@ -35,6 +36,7 @@ import { errorMessage } from '../lib/cn';
 import { sortEntries, type Entry, type SortDir, type SortKey, type TransferMode } from '../lib/entries';
 import { categoryOf, matchesFilter, type CategoryFilter } from '../lib/fileKind';
 import { formatBytes } from '../lib/formatters';
+import { copyName, entryPath, parentPrefix } from '../lib/paths';
 import { fromDirectoryInput, type DroppedContent } from '../lib/dropEntries';
 import { fetchHealthStatus } from '../services/healthService';
 import { createFolder, deleteFolder } from '../services/folderService';
@@ -100,7 +102,10 @@ export function FilesPage() {
   const [bulkTransfer, setBulkTransfer] = useState<BulkTransferTarget | null>(null);
   const [dragIds, setDragIds] = useState<string[] | null>(null);
   const [movingIds, setMovingIds] = useState<string[]>([]);
+  const [transferring, setTransferring] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // Ctrl+C / Ctrl+X remember these items until they are pasted into a folder with Ctrl+V.
+  const [clipboard, setClipboard] = useState<{ mode: 'copy' | 'cut'; entries: Entry[] } | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -308,23 +313,78 @@ export function FilesPage() {
     refetch();
   };
 
+  /**
+   * Move or copy entries into `destination` without a dialog (drag and drop, paste). Progress shows
+   * straight away: a spinner on moved items and a loading toast that the result replaces.
+   * `nameFor` picks another name for an entry (copies made next to the original).
+   */
+  const runTransfer = async (
+    items: Entry[],
+    mode: 'move' | 'copy',
+    destination: string,
+    nameFor?: (entry: Entry) => string | undefined,
+  ): Promise<BulkResult[] | null> => {
+    setTransferring(true);
+    setMovingIds(mode === 'move' ? items.map((e) => e.id) : []);
+    const toastId = toast.loading(`${mode === 'move' ? 'Moving' : 'Copying'} ${describeEntries(items)}…`);
+    try {
+      const results = await runBulk(items, (entry) => transferEntry(entry, mode, destination, false, nameFor?.(entry)));
+      handleBulkTransferDone(mode, results, toastId);
+      return results;
+    } catch (err) {
+      toast.error(errorMessage(err, `Couldn’t ${mode} the items`), { id: toastId });
+      return null;
+    } finally {
+      setMovingIds([]);
+      setTransferring(false);
+    }
+  };
+
   /** Entries dragged onto a folder (a tile, the path above the list, or the up button): move them there. */
   const moveDragged = async (destinationPrefix: string) => {
     const ids = dragIds ?? [];
     setDragIds(null);
     const moving = allEntries.filter((e) => ids.includes(e.id));
     if (moving.length === 0 || destinationPrefix === currentPrefix) return;
+    await runTransfer(moving, 'move', destinationPrefix);
+  };
 
-    // Show progress straight away: a spinner on the items and a loading toast that the result replaces.
-    setMovingIds(moving.map((e) => e.id));
-    const toastId = toast.loading(`Moving ${describeEntries(moving)}…`);
-    try {
-      const results = await runBulk(moving, (entry) => transferEntry(entry, 'move', destinationPrefix, false));
-      handleBulkTransferDone('move', results, toastId);
-    } catch (err) {
-      toast.error(errorMessage(err, 'Couldn’t move the items'), { id: toastId });
-    } finally {
-      setMovingIds([]);
+  /** Ctrl+C / Ctrl+X: remember the selected items (not when the user is copying selected text). */
+  const putOnClipboard = (mode: 'copy' | 'cut') => {
+    if (selectedEntries.length === 0 || window.getSelection()?.toString()) return false;
+    setClipboard({ mode, entries: selectedEntries });
+  };
+
+  const here = (entry: Entry) => parentPrefix(entryPath(entry)) === currentPrefix;
+
+  /** Ctrl+V or the Paste button: move (after a cut) or copy (after a copy) the clipboard into the folder being viewed. */
+  const pasteClipboard = async () => {
+    if (!clipboard || transferring) return;
+    const { mode, entries: source } = clipboard;
+
+    // Moving something to the folder it is already in does nothing.
+    const items = mode === 'cut' ? source.filter((e) => !here(e)) : source;
+    if (items.length === 0) {
+      setClipboard(null);
+      return;
+    }
+
+    // A copy pasted next to its original gets a new name instead of failing.
+    const taken = new Set(allEntries.map((e) => e.name));
+    const names = new Map<string, string>();
+    if (mode === 'copy') {
+      for (const entry of items.filter(here)) {
+        const name = copyName(entry.name, taken, entry.type === 'folder');
+        taken.add(name);
+        names.set(entry.id, name);
+      }
+    }
+
+    const results = await runTransfer(items, mode === 'cut' ? 'move' : 'copy', currentPrefix, (e) => names.get(e.id));
+    // A paste uses the clipboard up; only the items that failed stay on it, so they can be pasted again.
+    if (results) {
+      const failed = summarize(results).failed.map((r) => r.entry);
+      setClipboard(failed.length > 0 ? { mode, entries: failed } : null);
     }
   };
 
@@ -340,8 +400,15 @@ export function FilesPage() {
       navigateUp();
     },
     clearSelection: () => {
-      if (selectedEntries.length === 0) return false;
-      selection.clear();
+      if (selectedEntries.length > 0) selection.clear();
+      else if (clipboard) setClipboard(null); // a second Escape forgets what was cut or copied
+      else return false;
+    },
+    copy: () => putOnClipboard('copy'),
+    cut: () => putOnClipboard('cut'),
+    paste: () => {
+      if (!clipboard) return false;
+      void pasteClipboard();
     },
     selectAll: selection.selectAll,
     invertSelection: selection.invert,
@@ -454,6 +521,15 @@ export function FilesPage() {
           onDropToPrefix={moveDragged}
         />
 
+        <ClipboardBar
+          clipboard={clipboard}
+          destination={currentPrefix ? currentPrefix.replace(/\/+$/, '').split('/').pop()! : 'All files'}
+          canPaste={clipboard?.mode !== 'cut' || clipboard.entries.some((e) => !here(e))}
+          busy={transferring}
+          onPaste={pasteClipboard}
+          onClear={() => setClipboard(null)}
+        />
+
         <div className="relative flex min-h-0 flex-1">
           <main className="min-w-0 flex-1 overflow-y-auto" aria-busy={loading}>
             {error ? (
@@ -496,6 +572,7 @@ export function FilesPage() {
                 onReachEnd={hasMore ? loadMore : undefined}
                 dragIds={dragIds}
                 busyIds={movingIds}
+                cutIds={clipboard?.mode === 'cut' ? clipboard.entries.map((e) => e.id) : undefined}
                 onDragStart={setDragIds}
                 onDragEnd={() => setDragIds(null)}
                 onDropOnFolder={moveDragged}

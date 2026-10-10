@@ -63,6 +63,18 @@ describe('FileBrowser (grid)', () => {
     expect(screen.getByText('2 KB · PDF')).toBeInTheDocument();
   });
 
+  it('fades the items that were cut until they are pasted', () => {
+    renderBrowser({ cutIds: ['report.pdf'] });
+    expect(screen.getByText('report.pdf').closest('[data-entry-id]')).toHaveClass('opacity-40');
+    expect(screen.getByText('Reports').closest('[data-entry-id]')).not.toHaveClass('opacity-40');
+  });
+
+  it('fades cut items in the list view too', () => {
+    renderBrowser({ view: 'list', cutIds: ['report.pdf'] });
+    expect(screen.getByText('report.pdf').closest('tr')).toHaveClass('opacity-40');
+    expect(screen.getByText('Reports').closest('tr')).not.toHaveClass('opacity-40');
+  });
+
   it('selects a folder on a single click and opens it on double click', async () => {
     const { onOpenFolder, onChoose } = renderBrowser();
     await userEvent.click(screen.getByText('Reports'));

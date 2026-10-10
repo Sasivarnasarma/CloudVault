@@ -57,6 +57,8 @@ interface FileBrowserProps extends EntryHandlers, DragHandlers {
   onSortChange: (key: SortKey) => void;
   onSelectAll: () => void;
   onClearSelection: () => void;
+  /** Ids of entries on the clipboard to be moved (Ctrl+X): shown faded until they are pasted. */
+  cutIds?: readonly string[];
   /** Keyboard: go to the parent folder. */
   onGoUp: () => void;
   /** Keyboard: the cursor reached the last loaded item, so the next page can be loaded. */
@@ -175,9 +177,11 @@ interface ItemProps {
   drag: DragHandlers;
   /** The keyboard cursor is on this item: it is the one tab stop of the list. */
   tabStop: boolean;
+  /** The item was cut and is waiting to be pasted. */
+  cut: boolean;
 }
 
-function GridTile({ entry, index, selected, selection, handlers: h, drag, tabStop }: ItemProps) {
+function GridTile({ entry, index, selected, selection, handlers: h, drag, tabStop, cut }: ItemProps) {
   const items = menuFor(entry, h);
   const dnd = useEntryDnd(entry, selection, drag);
   const anySelected = selection.size > 0;
@@ -194,7 +198,7 @@ function GridTile({ entry, index, selected, selection, handlers: h, drag, tabSto
           selected
             ? 'border-accent bg-accent-soft shadow-card'
             : 'border-line hover:-translate-y-0.5 hover:border-line-strong hover:shadow-card',
-          dnd.dragging && 'opacity-40',
+          (dnd.dragging || cut) && 'opacity-40',
           dnd.busy && 'pointer-events-none',
           dnd.over && 'border-accent bg-accent-soft ring-2 ring-accent',
         )}
@@ -244,7 +248,7 @@ function GridTile({ entry, index, selected, selection, handlers: h, drag, tabSto
   );
 }
 
-function ListRow({ entry, index, selected, selection, handlers: h, drag, tabStop }: ItemProps) {
+function ListRow({ entry, index, selected, selection, handlers: h, drag, tabStop, cut }: ItemProps) {
   const items = menuFor(entry, h);
   const dnd = useEntryDnd(entry, selection, drag);
 
@@ -258,7 +262,7 @@ function ListRow({ entry, index, selected, selection, handlers: h, drag, tabStop
         className={cn(
           'group select-none border-b border-line/60 transition [animation:cv-fade_0.2s_ease-out_backwards]',
           selected ? 'bg-accent-soft' : 'hover:bg-surface',
-          dnd.dragging && 'opacity-40',
+          (dnd.dragging || cut) && 'opacity-40',
           dnd.busy && 'pointer-events-none opacity-60',
           dnd.over && 'bg-accent-soft outline outline-2 -outline-offset-2 outline-accent',
         )}
@@ -353,6 +357,7 @@ export function FileBrowser(props: FileBrowserProps) {
     onSortChange,
     onSelectAll,
     onClearSelection,
+    cutIds,
     onGoUp,
     onReachEnd,
     dragIds,
@@ -393,6 +398,7 @@ export function FileBrowser(props: FileBrowserProps) {
             handlers={handlers}
             drag={drag}
             tabStop={entry.id === nav.tabStopId}
+            cut={cutIds?.includes(entry.id) ?? false}
           />
         ))}
       </div>
@@ -433,6 +439,7 @@ export function FileBrowser(props: FileBrowserProps) {
             handlers={handlers}
             drag={drag}
             tabStop={entry.id === nav.tabStopId}
+            cut={cutIds?.includes(entry.id) ?? false}
           />
         ))}
       </tbody>

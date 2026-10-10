@@ -7,6 +7,17 @@ export function parentPrefix(keyOrPrefix: string): string {
   return parts.length > 0 ? `${parts.join('/')}/` : '';
 }
 
+/** "report.pdf" -> "report (copy).pdf", then "report (copy 2).pdf" ...: the first name not in `taken`. */
+export function copyName(name: string, taken: ReadonlySet<string>, isFolder = false): string {
+  const dot = isFolder ? -1 : name.lastIndexOf('.');
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const extension = dot > 0 ? name.slice(dot) : '';
+  for (let n = 1; ; n++) {
+    const candidate = `${stem} (copy${n === 1 ? '' : ` ${n}`})${extension}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
+
 /** The identifying path of an entry: the object key for files, the prefix for folders. */
 export function entryPath(entry: Entry): string {
   return entry.type === 'folder' ? entry.folder.prefix : entry.file.key;

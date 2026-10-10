@@ -48,14 +48,15 @@ export async function deleteEntry(entry: Entry): Promise<void> {
   else await deleteObject(entry.file.key);
 }
 
-/** Move or copy one entry into the folder `destinationPrefix`, keeping its name. */
+/** Move or copy one entry into the folder `destinationPrefix`, keeping its name unless `name` is given. */
 export async function transferEntry(
   entry: Entry,
   mode: 'move' | 'copy',
   destinationPrefix: string,
   overwrite: boolean,
+  name: string = entry.name,
 ): Promise<void> {
-  const target = `${destinationPrefix}${entry.name}`;
+  const target = `${destinationPrefix}${name}`;
 
   if (entry.type === 'folder') {
     const source = entry.folder.prefix;
