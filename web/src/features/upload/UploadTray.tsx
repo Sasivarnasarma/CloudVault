@@ -1,10 +1,11 @@
-import { AlertCircle, CheckCircle2, ChevronDown, CopyX, Loader2, Slash, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, CopyX, Slash, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useState } from 'react';
 import { Button, IconButton } from '../../components/common/Button';
 import { cn } from '../../lib/cn';
 import { formatBytes } from '../../lib/formatters';
 import type { UploadItem } from './useUpload';
+import { Spinner } from '../../components/common/Spinner';
 
 interface UploadTrayProps {
   queue: UploadItem[];
@@ -32,7 +33,7 @@ function StatusIcon({ status }: { status: UploadItem['status'] }) {
   if (status === 'error') return <AlertCircle className="size-4 text-danger" aria-label="Failed" />;
   if (status === 'cancelled') return <Slash className="size-4 text-ink-3" aria-label="Cancelled" />;
   if (status === 'conflict') return <CopyX className="size-4 text-folder-deep" aria-label="Already exists" />;
-  if (status === 'uploading') return <Loader2 className="size-4 animate-spin text-ink-2" aria-label="Uploading" />;
+  if (status === 'uploading') return <Spinner className="text-ink-2" aria-label="Uploading" />;
   return <span className="size-2 rounded-full bg-line-strong" aria-label="Waiting" />;
 }
 

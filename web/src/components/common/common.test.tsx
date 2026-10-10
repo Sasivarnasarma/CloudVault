@@ -1,10 +1,14 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { FolderOpen } from 'lucide-react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { entryDragData } from '../../test/dataTransfer';
 import { Breadcrumbs } from './Breadcrumbs';
 import { Button, IconButton } from './Button';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Kbd, KeyCombo } from './Kbd';
+import { Spinner } from './Spinner';
+import { StateMessage } from './StateMessage';
 
 describe('Breadcrumbs', () => {
   it('shows the root label and every folder in the path', () => {
@@ -139,5 +143,44 @@ describe('ConfirmDialog', () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
     await userEvent.keyboard('{Escape}');
     expect(onCancel).not.toHaveBeenCalled();
+  });
+});
+
+describe('Spinner', () => {
+  it('spins at the default size and takes a different size', () => {
+    const { container } = render(<Spinner className="size-6" aria-label="Loading" />);
+    const icon = container.querySelector('svg')!;
+    expect(icon).toHaveClass('animate-spin', 'size-6');
+    expect(icon).not.toHaveClass('size-4');
+  });
+});
+
+describe('Kbd / KeyCombo', () => {
+  it('shows a shortcut as separate key caps', () => {
+    const { container } = render(<KeyCombo chord="mod+shift+u" />);
+    expect([...container.querySelectorAll('kbd')].map((k) => k.textContent)).toEqual(['Ctrl', 'Shift', 'U']);
+  });
+
+  it('shows one key with the style of its variant', () => {
+    render(<Kbd variant="hint">/</Kbd>);
+    expect(screen.getByText('/')).toHaveClass('font-mono', 'text-ink-3');
+  });
+});
+
+describe('StateMessage', () => {
+  it('shows an icon, a title, a description and an optional action', () => {
+    render(
+      <StateMessage icon={FolderOpen} title="Nothing here" description="Add something.">
+        <button type="button">Add</button>
+      </StateMessage>,
+    );
+    expect(screen.getByRole('heading', { name: 'Nothing here' })).toBeInTheDocument();
+    expect(screen.getByText('Add something.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
+  });
+
+  it('styles an error differently from an empty state', () => {
+    const { container } = render(<StateMessage icon={FolderOpen} tone="danger" title="Oops" description="Failed" />);
+    expect(container.querySelector('.bg-danger-soft')).not.toBeNull();
   });
 });

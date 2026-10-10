@@ -1,9 +1,9 @@
-import { Loader2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Button } from '../../components/common/Button';
 import { Dialog } from '../../components/common/Dialog';
 import { errorMessage } from '../../lib/cn';
 import { createFolder } from '../../services/folderService';
+import { Spinner } from '../../components/common/Spinner';
 
 interface CreateFolderModalProps {
   isOpen: boolean;
@@ -91,7 +91,7 @@ export function CreateFolderModal({ isOpen, onClose, targetPrefix, onFolderCreat
             Cancel
           </Button>
           <Button type="submit" variant="primary" disabled={loading || !folderName.trim()}>
-            {loading && <Loader2 className="size-4 animate-spin" />}
+            {loading && <Spinner />}
             Create folder
           </Button>
         </div>

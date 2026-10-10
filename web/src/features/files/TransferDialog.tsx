@@ -1,4 +1,3 @@
-import { Loader2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Button } from '../../components/common/Button';
 import { Dialog } from '../../components/common/Dialog';
@@ -9,6 +8,7 @@ import { copyFolder, moveFolder } from '../../services/folderService';
 import { ApiError } from '../../services/http';
 import { copyObject, moveObject } from '../../services/objectService';
 import { FolderPicker } from './FolderPicker';
+import { Spinner } from '../../components/common/Spinner';
 
 export interface TransferTarget {
   entry: Entry;
@@ -147,7 +147,7 @@ function TransferForm({
           Cancel
         </Button>
         <Button type="submit" variant="primary" disabled={!canSubmit}>
-          {loading && <Loader2 className="size-4 animate-spin" />}
+          {loading && <Spinner />}
           {loading ? COPY[mode].busy : COPY[mode].submit}
         </Button>
       </div>

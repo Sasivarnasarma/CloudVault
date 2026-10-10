@@ -12,6 +12,9 @@ vi.mock('../../services/objectService', () => ({
   requestPresignedDownload: vi.fn(),
 }));
 import { getObjectMetadata, requestPresignedDownload } from '../../services/objectService';
+import { DeleteDialog } from './DeleteDialog';
+import { ListingState } from './ListingState';
+import { StatusBar } from './StatusBar';
 
 const metadataMock = vi.mocked(getObjectMetadata);
 const downloadMock = vi.mocked(requestPresignedDownload);
@@ -260,5 +263,108 @@ describe('Inspector', () => {
     await waitFor(() => expect(metadataMock).toHaveBeenCalled());
     expect(downloadMock).not.toHaveBeenCalled();
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+});
+
+
+const entryFile = (name: string): Entry => {
+  const file = makeFile(name);
+  return { type: 'file', id: file.key, name, file };
+};
+const entryFolder = (name: string): Entry => {
+  const folder = makeFolder(name);
+  return { type: 'folder', id: folder.prefix, name, folder };
+};
+
+describe('DeleteDialog', () => {
+  const setup = (entries: Entry[] | null) => {
+    const h = { onConfirm: vi.fn(), onCancel: vi.fn() };
+    render(<DeleteDialog entries={entries} loading={false} {...h} />);
+    return h;
+  };
+
+  it('is closed without anything to delete', () => {
+    setup(null);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('names a single file', () => {
+    setup([entryFile('a.txt')]);
+    expect(screen.getByRole('dialog', { name: 'Delete file?' })).toHaveTextContent('“a.txt” will be permanently deleted');
+  });
+
+  it('warns that a folder takes everything inside it', () => {
+    setup([entryFolder('Docs')]);
+    expect(screen.getByRole('dialog', { name: 'Delete folder?' })).toHaveTextContent('everything inside it');
+  });
+
+  it('counts several items and mentions folders', () => {
+    setup([entryFile('a.txt'), entryFile('b.txt'), entryFolder('Docs')]);
+    const dialog = screen.getByRole('dialog', { name: 'Delete 3 items?' });
+    expect(dialog).toHaveTextContent('2 files and 1 folder will be permanently deleted, including everything inside the folders');
+  });
+
+  it('confirms and cancels', async () => {
+    const h = setup([entryFile('a.txt')]);
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(h.onConfirm).toHaveBeenCalledTimes(1);
+    expect(h.onCancel).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('StatusBar', () => {
+  it('counts folders, files and their size', () => {
+    render(<StatusBar folderCount={1} fileCount={3} totalSize={2048} hasMore={false} />);
+    expect(screen.getByText('1 folder, 3 files')).toBeInTheDocument();
+    expect(screen.getByText('2 KB')).toBeInTheDocument();
+    expect(screen.queryByText(/shown/)).not.toBeInTheDocument();
+  });
+
+  it('adds a plus while more items can still be loaded, and shows how many match the filters', () => {
+    render(<StatusBar folderCount={2} fileCount={1} totalSize={0} hasMore shown={4} />);
+    expect(screen.getByText('2+ folders, 1+ file')).toBeInTheDocument();
+    expect(screen.getByText('4 shown')).toBeInTheDocument();
+  });
+});
+
+describe('ListingState', () => {
+  const setup = (props: Partial<React.ComponentProps<typeof ListingState>> = {}) => {
+    const h = { onRetry: vi.fn(), onClearFilters: vi.fn() };
+    render(
+      <ListingState error={null} loading={false} empty={false} filtered={false} view="grid" {...h} {...props}>
+        <p>the listing</p>
+      </ListingState>,
+    );
+    return h;
+  };
+
+  it('shows the listing when there is something to show', () => {
+    setup();
+    expect(screen.getByText('the listing')).toBeInTheDocument();
+  });
+
+  it('shows the error with a way to try again, instead of the listing', async () => {
+    const h = setup({ error: 'Storage is down' });
+    expect(screen.getByText('Unable to load files')).toBeInTheDocument();
+    expect(screen.getByText('Storage is down')).toBeInTheDocument();
+    expect(screen.queryByText('the listing')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(h.onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a placeholder while loading, and an empty message when nothing is left', async () => {
+    const { unmount } = render(
+      <ListingState error={null} loading empty={false} filtered={false} view="list" onRetry={() => {}} onClearFilters={() => {}}>
+        <p>the listing</p>
+      </ListingState>,
+    );
+    expect(screen.queryByText('the listing')).not.toBeInTheDocument();
+    unmount();
+
+    const h = setup({ empty: true, filtered: true });
+    expect(screen.getByText('Nothing matches your filters')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(h.onClearFilters).toHaveBeenCalledTimes(1);
   });
 });

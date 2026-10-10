@@ -4,9 +4,11 @@ import type { Entry } from '../../lib/entries';
 import { copyFolder, deleteFolder, moveFolder } from '../../services/folderService';
 import { copyObject, deleteObject, moveObject } from '../../services/objectService';
 
-export interface BulkResult {
+export interface BulkResult<T = void> {
   entry: Entry;
   ok: boolean;
+  /** What the action returned for this entry, when it worked. */
+  value?: T;
   error?: string;
 }
 
@@ -16,12 +18,12 @@ interface RunOptions {
 }
 
 /** Run `action` for every entry (a few at a time). One failure never stops the others. */
-export async function runBulk(
+export async function runBulk<T>(
   entries: Entry[],
-  action: (entry: Entry) => Promise<void>,
+  action: (entry: Entry) => Promise<T>,
   { concurrency = 4, onProgress }: RunOptions = {},
-): Promise<BulkResult[]> {
-  const results: BulkResult[] = new Array(entries.length);
+): Promise<BulkResult<T>[]> {
+  const results: BulkResult<T>[] = new Array(entries.length);
   let done = 0;
 
   await runPool(
@@ -30,8 +32,7 @@ export async function runBulk(
     async (index) => {
       const entry = entries[index];
       try {
-        await action(entry);
-        results[index] = { entry, ok: true };
+        results[index] = { entry, ok: true, value: await action(entry) };
       } catch (err) {
         results[index] = { entry, ok: false, error: errorMessage(err, 'Failed') };
       }
@@ -43,9 +44,11 @@ export async function runBulk(
   return results;
 }
 
-export async function deleteEntry(entry: Entry): Promise<void> {
-  if (entry.type === 'folder') await deleteFolder(entry.folder.prefix);
-  else await deleteObject(entry.file.key);
+/** Delete a file or a folder with everything in it. Returns how many items were removed. */
+export async function deleteEntry(entry: Entry): Promise<number> {
+  if (entry.type === 'folder') return (await deleteFolder(entry.folder.prefix)).deleted_count;
+  await deleteObject(entry.file.key);
+  return 1;
 }
 
 /** Move or copy one entry into the folder `destinationPrefix`, keeping its name unless `name` is given. */
@@ -73,7 +76,7 @@ export async function transferEntry(
     : copyObject(entry.file.key, target, overwrite));
 }
 
-export function summarize(results: BulkResult[]): { succeeded: BulkResult[]; failed: BulkResult[] } {
+export function summarize<T>(results: BulkResult<T>[]): { succeeded: BulkResult<T>[]; failed: BulkResult<T>[] } {
   return { succeeded: results.filter((r) => r.ok), failed: results.filter((r) => !r.ok) };
 }
 

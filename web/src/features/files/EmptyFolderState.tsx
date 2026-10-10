@@ -1,4 +1,5 @@
 import { FolderOpen, SearchX } from 'lucide-react';
+import { StateMessage } from '../../components/common/StateMessage';
 
 interface EmptyFolderStateProps {
   filtered: boolean;
@@ -6,20 +7,16 @@ interface EmptyFolderStateProps {
 }
 
 export function EmptyFolderState({ filtered, onClearFilters }: EmptyFolderStateProps) {
-  const Icon = filtered ? SearchX : FolderOpen;
   return (
-    <div className="flex h-full min-h-72 flex-col items-center justify-center px-6 text-center">
-      <div className="mb-5 flex size-20 items-center justify-center rounded-3xl border border-dashed border-line-strong bg-surface text-ink-3">
-        <Icon className="size-9" strokeWidth={1.5} />
-      </div>
-      <h2 className="text-base font-semibold text-ink">
-        {filtered ? 'Nothing matches your filters' : 'This folder is empty'}
-      </h2>
-      <p className="mt-1.5 max-w-xs text-sm text-ink-3">
-        {filtered
+    <StateMessage
+      icon={filtered ? SearchX : FolderOpen}
+      title={filtered ? 'Nothing matches your filters' : 'This folder is empty'}
+      description={
+        filtered
           ? 'Try a different search term or clear the filters.'
-          : 'Drag files anywhere on this window to upload them, or create a new folder.'}
-      </p>
+          : 'Drag files anywhere on this window to upload them, or create a new folder.'
+      }
+    >
       {filtered && (
         <button
           type="button"
@@ -29,6 +26,6 @@ export function EmptyFolderState({ filtered, onClearFilters }: EmptyFolderStateP
           Clear filters
         </button>
       )}
-    </div>
+    </StateMessage>
   );
 }

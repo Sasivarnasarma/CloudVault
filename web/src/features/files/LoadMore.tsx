@@ -1,6 +1,6 @@
-import { Loader2 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Button } from '../../components/common/Button';
+import { Spinner } from '../../components/common/Spinner';
 
 interface LoadMoreProps {
   hasMore: boolean;
@@ -46,7 +46,7 @@ export function LoadMore({ hasMore, loading, error, loadedCount, onLoadMore }: L
       )}
       {loading ? (
         <span role="status" className="flex items-center gap-2">
-          <Loader2 className="size-4 animate-spin" />
+          <Spinner />
           Loading more…
         </span>
       ) : (

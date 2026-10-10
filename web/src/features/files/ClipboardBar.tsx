@@ -1,8 +1,9 @@
-import { ClipboardPaste, Copy, Loader2, Scissors, X } from 'lucide-react';
+import { ClipboardPaste, Copy, Scissors, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Button, IconButton } from '../../components/common/Button';
+import { KeyCombo } from '../../components/common/Kbd';
+import { Spinner } from '../../components/common/Spinner';
 import type { Entry } from '../../lib/entries';
-import { chordKeys } from '../../lib/keymap';
 import { describeEntries } from './bulkActions';
 
 interface ClipboardBarProps {
@@ -43,13 +44,11 @@ export function ClipboardBar({ clipboard, destination, canPaste, busy, onPaste, 
             <span className="ml-auto flex items-center gap-1.5">
               {!canPaste && <span className="text-xs text-ink-3">Already in this folder</span>}
               <Button variant="primary" onClick={onPaste} disabled={!canPaste || busy} className="h-8">
-                {busy ? <Loader2 className="size-4 animate-spin" /> : <ClipboardPaste className="size-4" />}
+                {busy ? <Spinner /> : <ClipboardPaste className="size-4" />}
                 <span>
                   Paste into <span className="font-semibold">{destination}</span>
                 </span>
-                <kbd className="hidden rounded border border-white/30 px-1 font-mono text-[11px] sm:inline">
-                  {chordKeys('mod+v').join('+')}
-                </kbd>
+                <KeyCombo chord="mod+v" variant="on-accent" className="max-sm:hidden" />
               </Button>
               <IconButton label="Clear clipboard" onClick={onClear} className="size-8">
                 <X className="size-4" />

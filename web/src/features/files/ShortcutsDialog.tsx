@@ -1,6 +1,7 @@
 import { Fragment } from 'react';
 import { Dialog } from '../../components/common/Dialog';
-import { chordKeys, SHORTCUTS, type Shortcut, type ShortcutGroup } from '../../lib/keymap';
+import { KeyCombo } from '../../components/common/Kbd';
+import { SHORTCUTS, type Shortcut, type ShortcutGroup } from '../../lib/keymap';
 
 const GROUPS: ShortcutGroup[] = ['Move around', 'Select', 'Work with items', 'Upload and view'];
 
@@ -11,16 +12,7 @@ function Keys({ shortcut }: { shortcut: Shortcut }) {
       {shortcut.chords.map((chord, i) => (
         <Fragment key={chord}>
           {i > 0 && <span className="text-xs text-ink-3">or</span>}
-          <span className="inline-flex items-center gap-0.5">
-            {chordKeys(chord).map((key, j) => (
-              <kbd
-                key={j}
-                className="min-w-6 rounded-md border border-line-strong bg-surface px-1.5 py-0.5 text-center font-mono text-[11px] text-ink-2 shadow-card"
-              >
-                {key}
-              </kbd>
-            ))}
-          </span>
+          <KeyCombo chord={chord} />
         </Fragment>
       ))}
     </span>

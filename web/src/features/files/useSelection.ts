@@ -97,3 +97,5 @@ export function useSelection(orderedIds: string[], resetKey: string) {
 
   return { selected, toggle, choose, selectRange, selectAll, invert, clear, remove, replace };
 }
+
+export type SelectionState = ReturnType<typeof useSelection>;

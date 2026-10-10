@@ -1,10 +1,10 @@
-import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Breadcrumbs } from '../../components/common/Breadcrumbs';
 import { errorMessage } from '../../lib/cn';
 import { listObjects } from '../../services/objectService';
 import type { FolderObject } from '../../types';
 import { FolderIcon } from './FileIcon';
+import { Spinner } from '../../components/common/Spinner';
 
 interface FolderPickerProps {
   prefix: string;
@@ -42,7 +42,7 @@ export function FolderPicker({ prefix, onNavigate, excludedPrefix, excludedPrefi
       <div className="h-48 overflow-y-auto p-1.5">
         {!current ? (
           <div role="status" aria-label="Loading folders" className="flex h-full items-center justify-center text-ink-3">
-            <Loader2 className="size-5 animate-spin" />
+            <Spinner className="size-5" />
           </div>
         ) : 'error' in current ? (
           <p role="alert" className="p-3 text-sm text-danger">

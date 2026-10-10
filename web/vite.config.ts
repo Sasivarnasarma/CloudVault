@@ -9,6 +9,22 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
+    build: {
+      rolldownOptions: {
+        output: {
+          // Split the libraries into their own files: they change rarely, so browsers keep them cached
+          // between releases, and no single file grows past the size warning.
+          codeSplitting: {
+            groups: [
+              { name: 'react', test: /node_modules\/(react|react-dom|scheduler)\//, priority: 40 },
+              { name: 'radix', test: /node_modules\/@radix-ui\//, priority: 30 },
+              { name: 'motion', test: /node_modules\/(motion|motion-dom|motion-utils|framer-motion)\//, priority: 20 },
+              { name: 'icons', test: /node_modules\/lucide-react\//, priority: 10 },
+            ],
+          },
+        },
+      },
+    },
     server: {
       port: 5173,
       proxy: {

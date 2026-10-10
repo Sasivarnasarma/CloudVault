@@ -7,12 +7,12 @@ import {
   FolderInput,
   FolderOpen,
   Info,
-  Loader2,
   Minus,
   Pencil,
   Trash2,
 } from 'lucide-react';
 import { useCallback, useRef, type DragEvent, type MouseEvent } from 'react';
+import { Spinner } from '../../components/common/Spinner';
 import { EntryContextMenu, EntryMoreMenu, type MenuItem } from '../../components/common/EntryMenu';
 import { cn } from '../../lib/cn';
 import { setEntryDrag } from '../../lib/dragMove';
@@ -240,7 +240,7 @@ function GridTile({ entry, index, selected, selection, handlers: h, drag, tabSto
             aria-label={`Moving ${entry.name}`}
             className="absolute inset-0 grid place-items-center rounded-2xl bg-surface/70 text-accent backdrop-blur-[1px]"
           >
-            <Loader2 className="size-6 animate-spin" />
+            <Spinner className="size-6" />
           </div>
         )}
       </div>
@@ -302,7 +302,7 @@ function ListRow({ entry, index, selected, selection, handlers: h, drag, tabStop
         <td className="px-2 text-right">
           {dnd.busy ? (
             <span role="status" aria-label={`Moving ${entry.name}`} className="inline-flex size-8 items-center justify-center text-accent">
-              <Loader2 className="size-4 animate-spin" />
+              <Spinner />
             </span>
           ) : (
             <div className="opacity-0 transition focus-within:opacity-100 group-hover:opacity-100 max-sm:opacity-100">

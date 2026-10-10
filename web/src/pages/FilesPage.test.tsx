@@ -990,7 +990,7 @@ describe('FilesPage keyboard navigation', () => {
     item('Photos').focus();
     await user.keyboard('{ArrowDown}{ArrowDown}');
     await user.keyboard('{Delete}');
-    expect(await screen.findByRole('dialog', { name: 'Delete “notes.md”?' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Delete file?' })).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toHaveTextContent('notes.md');
   });
 });
@@ -1086,7 +1086,7 @@ describe('FilesPage keyboard shortcuts', () => {
     const user = await renderPage();
     await select(user, 'notes.md');
     await user.keyboard('{Shift>}{Delete}{/Shift}');
-    expect(await screen.findByRole('dialog', { name: 'Delete “notes.md”?' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Delete file?' })).toBeInTheDocument();
     expect(deleteObject).not.toHaveBeenCalled();
   });
 

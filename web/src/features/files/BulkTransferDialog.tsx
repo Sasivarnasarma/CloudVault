@@ -1,10 +1,10 @@
-import { Loader2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '../../components/common/Button';
 import { Dialog } from '../../components/common/Dialog';
 import type { Entry } from '../../lib/entries';
 import { describeEntries, runBulk, summarize, transferEntry, type BulkResult } from './bulkActions';
 import { FolderPicker } from './FolderPicker';
+import { Spinner } from '../../components/common/Spinner';
 
 export interface BulkTransferTarget {
   mode: 'move' | 'copy';
@@ -99,7 +99,7 @@ function BulkTransferForm({
           Cancel
         </Button>
         <Button variant="primary" onClick={submit} disabled={running}>
-          {running && <Loader2 className="size-4 animate-spin" />}
+          {running && <Spinner />}
           {running ? `${verb === 'Move' ? 'Moving' : 'Copying'} ${progress.done} of ${progress.total}…` : `${verb} here`}
         </Button>
       </div>

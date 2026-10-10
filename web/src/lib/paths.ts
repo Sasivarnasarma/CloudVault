@@ -18,6 +18,11 @@ export function copyName(name: string, taken: ReadonlySet<string>, isFolder = fa
   }
 }
 
+/** The name to show for a folder prefix: its last segment, or `rootLabel` for the bucket root. */
+export function folderLabel(prefix: string, rootLabel: string): string {
+  return prefix.replace(/\/+$/, '').split('/').pop() || rootLabel;
+}
+
 /** The identifying path of an entry: the object key for files, the prefix for folders. */
 export function entryPath(entry: Entry): string {
   return entry.type === 'folder' ? entry.folder.prefix : entry.file.key;

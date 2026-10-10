@@ -7,6 +7,7 @@ import { parentPrefix } from '../../lib/paths';
 import type { SortDir, SortKey } from '../../lib/entries';
 import type { ViewMode } from '../../features/files/FileBrowser';
 import { Breadcrumbs } from '../common/Breadcrumbs';
+import { Kbd } from '../common/Kbd';
 import { IconButton } from '../common/Button';
 
 interface ToolbarProps {
@@ -106,9 +107,9 @@ export function Toolbar(props: ToolbarProps) {
               <X className="size-3.5" />
             </button>
           ) : (
-            <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-line bg-canvas px-1.5 font-mono text-[11px] text-ink-3 sm:block">
+            <Kbd variant="hint" className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 sm:block">
               /
-            </kbd>
+            </Kbd>
           )}
         </div>
 
