@@ -12,7 +12,7 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-react';
-import type { DragEvent, MouseEvent } from 'react';
+import { useCallback, useRef, type DragEvent, type MouseEvent } from 'react';
 import { EntryContextMenu, EntryMoreMenu, type MenuItem } from '../../components/common/EntryMenu';
 import { cn } from '../../lib/cn';
 import { setEntryDrag } from '../../lib/dragMove';
@@ -21,13 +21,14 @@ import { kindLabel } from '../../lib/fileKind';
 import { formatBytes, formatDate, formatRelativeDate } from '../../lib/formatters';
 import { FileIcon, FolderIcon } from './FileIcon';
 import { useDropTarget } from '../../hooks/useDropTarget';
+import { useEntryNavigation } from './useEntryNavigation';
 
 export type ViewMode = 'grid' | 'list';
 
 export interface EntryHandlers {
   onOpenFolder: (prefix: string) => void;
-  /** Plain click on a file: select just that file (and show its details). */
-  onSelectFile: (id: string) => void;
+  /** Plain click, arrow keys, "Details": select just this item (a file then shows its details). */
+  onChoose: (id: string) => void;
   /** Checkbox or Ctrl/Cmd+click: add or remove one item from the selection. */
   onToggleSelect: (id: string) => void;
   /** Shift+click: select everything between the last clicked item and this one. */
@@ -56,6 +57,10 @@ interface FileBrowserProps extends EntryHandlers, DragHandlers {
   onSortChange: (key: SortKey) => void;
   onSelectAll: () => void;
   onClearSelection: () => void;
+  /** Keyboard: go to the parent folder. */
+  onGoUp: () => void;
+  /** Keyboard: the cursor reached the last loaded item, so the next page can be loaded. */
+  onReachEnd?: () => void;
 }
 
 function menuFor(entry: Entry, h: EntryHandlers): MenuItem[] {
@@ -72,19 +77,29 @@ function menuFor(entry: Entry, h: EntryHandlers): MenuItem[] {
     ];
   }
   return [
-    { label: 'Details', icon: Info, onSelect: () => h.onSelectFile(entry.id) },
+    { label: 'Details', icon: Info, onSelect: () => h.onChoose(entry.id) },
     { label: 'Download', icon: Download, onSelect: () => h.onDownload(entry.file.key, entry.name) },
     ...organize,
     { label: 'Delete', icon: Trash2, danger: true, separatorBefore: true, onSelect: () => h.onDelete(entry) },
   ];
 }
 
-/** Click on an entry: modifiers extend the selection, otherwise open the folder / select the file. */
+/** Touch screens have no double-click, so there a tap on a folder opens it. */
+const tapOpensFolders = () => window.matchMedia?.('(pointer: coarse)').matches ?? false;
+
+/** Click on an entry, like a desktop file manager: modifiers extend the selection, otherwise select it. */
 function handleClick(e: MouseEvent, entry: Entry, h: EntryHandlers) {
   if (e.shiftKey) h.onSelectRange(entry.id);
   else if (e.ctrlKey || e.metaKey) h.onToggleSelect(entry.id);
-  else if (entry.type === 'folder') h.onOpenFolder(entry.folder.prefix);
-  else h.onSelectFile(entry.id);
+  else if (entry.type === 'folder' && tapOpensFolders()) h.onOpenFolder(entry.folder.prefix);
+  else h.onChoose(entry.id);
+}
+
+/** Double-click opens a folder or downloads a file. */
+function handleDoubleClick(e: MouseEvent, entry: Entry, h: EntryHandlers) {
+  if (e.shiftKey || e.ctrlKey || e.metaKey) return;
+  if (entry.type === 'folder') h.onOpenFolder(entry.folder.prefix);
+  else h.onDownload(entry.file.key, entry.name);
 }
 
 /** Drag source + (for folders) drop target behaviour of one entry. */
@@ -118,12 +133,14 @@ function SelectBox({
   label,
   onChange,
   className,
+  tabbable = true,
 }: {
   checked: boolean;
   indeterminate?: boolean;
   label: string;
   onChange: () => void;
   className?: string;
+  tabbable?: boolean;
 }) {
   return (
     <button
@@ -131,6 +148,7 @@ function SelectBox({
       role="checkbox"
       aria-checked={indeterminate ? 'mixed' : checked}
       aria-label={label}
+      tabIndex={tabbable ? undefined : -1}
       onClick={(e) => {
         e.stopPropagation();
         onChange();
@@ -155,9 +173,11 @@ interface ItemProps {
   selection: ReadonlySet<string>;
   handlers: EntryHandlers;
   drag: DragHandlers;
+  /** The keyboard cursor is on this item: it is the one tab stop of the list. */
+  tabStop: boolean;
 }
 
-function GridTile({ entry, index, selected, selection, handlers: h, drag }: ItemProps) {
+function GridTile({ entry, index, selected, selection, handlers: h, drag, tabStop }: ItemProps) {
   const items = menuFor(entry, h);
   const dnd = useEntryDnd(entry, selection, drag);
   const anySelected = selection.size > 0;
@@ -167,6 +187,7 @@ function GridTile({ entry, index, selected, selection, handlers: h, drag }: Item
       <div
         {...dnd.dragProps}
         {...dnd.dropHandlers}
+        data-entry-id={entry.id}
         style={{ animationDelay: `${Math.min(index * 15, 200)}ms` }}
         className={cn(
           'group relative select-none rounded-2xl border bg-surface transition [animation:cv-rise_0.22s_ease-out_backwards] [contain-intrinsic-size:auto_9rem] [content-visibility:auto]',
@@ -181,8 +202,10 @@ function GridTile({ entry, index, selected, selection, handlers: h, drag }: Item
       >
         <button
           type="button"
+          data-entry-main
+          tabIndex={tabStop ? 0 : -1}
           onClick={(e) => handleClick(e, entry, h)}
-          onDoubleClick={() => entry.type === 'file' && h.onDownload(entry.file.key, entry.name)}
+          onDoubleClick={(e) => handleDoubleClick(e, entry, h)}
           aria-pressed={entry.type === 'file' ? selected : undefined}
           className="flex w-full flex-col items-start rounded-2xl p-4 text-left"
         >
@@ -202,10 +225,10 @@ function GridTile({ entry, index, selected, selection, handlers: h, drag }: Item
             selected || anySelected ? 'opacity-100' : 'opacity-0',
           )}
         >
-          <SelectBox checked={selected} label={`Select ${entry.name}`} onChange={() => h.onToggleSelect(entry.id)} />
+          <SelectBox checked={selected} label={`Select ${entry.name}`} onChange={() => h.onToggleSelect(entry.id)} tabbable={tabStop} />
         </div>
         <div className="absolute right-2 top-2 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
-          <EntryMoreMenu items={items} label={entry.name} />
+          <EntryMoreMenu items={items} label={entry.name} tabbable={tabStop} />
         </div>
         {dnd.busy && (
           <div
@@ -221,7 +244,7 @@ function GridTile({ entry, index, selected, selection, handlers: h, drag }: Item
   );
 }
 
-function ListRow({ entry, index, selected, selection, handlers: h, drag }: ItemProps) {
+function ListRow({ entry, index, selected, selection, handlers: h, drag, tabStop }: ItemProps) {
   const items = menuFor(entry, h);
   const dnd = useEntryDnd(entry, selection, drag);
 
@@ -230,6 +253,7 @@ function ListRow({ entry, index, selected, selection, handlers: h, drag }: ItemP
       <tr
         {...dnd.dragProps}
         {...dnd.dropHandlers}
+        data-entry-id={entry.id}
         style={{ animationDelay: `${Math.min(index * 12, 150)}ms` }}
         className={cn(
           'group select-none border-b border-line/60 transition [animation:cv-fade_0.2s_ease-out_backwards]',
@@ -245,16 +269,19 @@ function ListRow({ entry, index, selected, selection, handlers: h, drag }: ItemP
             checked={selected}
             label={`Select ${entry.name}`}
             onChange={() => h.onToggleSelect(entry.id)}
+            tabbable={tabStop}
             className={cn(!selected && selection.size === 0 && 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100')}
           />
         </td>
         <td className="py-1.5 pl-2 pr-4">
           <button
             type="button"
+            data-entry-main
+            tabIndex={tabStop ? 0 : -1}
             onClick={(e) => handleClick(e, entry, h)}
-            onDoubleClick={() => entry.type === 'file' && h.onDownload(entry.file.key, entry.name)}
+            onDoubleClick={(e) => handleDoubleClick(e, entry, h)}
             aria-pressed={entry.type === 'file' ? selected : undefined}
-            className="flex w-full min-w-0 items-center gap-3 rounded-lg py-1 text-left"
+            className="flex w-full min-w-0 scroll-mt-12 items-center gap-3 rounded-lg py-1 text-left"
           >
             {entry.type === 'folder' ? <FolderIcon size="sm" /> : <FileIcon file={entry.file} size="sm" />}
             <span className="truncate font-medium text-ink" title={entry.name}>
@@ -275,7 +302,7 @@ function ListRow({ entry, index, selected, selection, handlers: h, drag }: ItemP
             </span>
           ) : (
             <div className="opacity-0 transition focus-within:opacity-100 group-hover:opacity-100 max-sm:opacity-100">
-              <EntryMoreMenu items={items} label={entry.name} />
+              <EntryMoreMenu items={items} label={entry.name} tabbable={tabStop} />
             </div>
           )}
         </td>
@@ -326,6 +353,8 @@ export function FileBrowser(props: FileBrowserProps) {
     onSortChange,
     onSelectAll,
     onClearSelection,
+    onGoUp,
+    onReachEnd,
     dragIds,
     busyIds,
     onDragStart,
@@ -335,11 +364,34 @@ export function FileBrowser(props: FileBrowserProps) {
   } = props;
   const drag: DragHandlers = { dragIds, busyIds, onDragStart, onDragEnd, onDropOnFolder };
 
+  const containerRef = useRef<HTMLElement | null>(null);
+  const setContainer = useCallback((el: HTMLElement | null) => {
+    containerRef.current = el;
+  }, []);
+  const nav = useEntryNavigation({
+    entries,
+    view,
+    containerRef,
+    onChoose: handlers.onChoose,
+    onOpenFolder: handlers.onOpenFolder,
+    onGoUp,
+    onReachEnd,
+  });
+
   if (view === 'grid') {
     return (
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-3 p-5">
+      <div ref={setContainer} onFocus={nav.onFocus} className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-3 p-5">
         {entries.map((entry, i) => (
-          <GridTile key={entry.id} entry={entry} index={i} selected={selection.has(entry.id)} selection={selection} handlers={handlers} drag={drag} />
+          <GridTile
+            key={entry.id}
+            entry={entry}
+            index={i}
+            selected={selection.has(entry.id)}
+            selection={selection}
+            handlers={handlers}
+            drag={drag}
+            tabStop={entry.id === nav.tabStopId}
+          />
         ))}
       </div>
     );
@@ -349,7 +401,7 @@ export function FileBrowser(props: FileBrowserProps) {
   const allSelected = entries.length > 0 && selectedCount === entries.length;
 
   return (
-    <table className="w-full table-fixed border-collapse text-sm">
+    <table ref={setContainer} onFocus={nav.onFocus} className="w-full table-fixed border-collapse text-sm">
       <thead className="sticky top-0 z-10 bg-canvas/90 text-left text-xs uppercase tracking-wider text-ink-3 backdrop-blur">
         <tr className="border-b border-line">
           <th scope="col" className="w-12 pl-5">
@@ -370,7 +422,16 @@ export function FileBrowser(props: FileBrowserProps) {
       </thead>
       <tbody>
         {entries.map((entry, i) => (
-          <ListRow key={entry.id} entry={entry} index={i} selected={selection.has(entry.id)} selection={selection} handlers={handlers} drag={drag} />
+          <ListRow
+            key={entry.id}
+            entry={entry}
+            index={i}
+            selected={selection.has(entry.id)}
+            selection={selection}
+            handlers={handlers}
+            drag={drag}
+            tabStop={entry.id === nav.tabStopId}
+          />
         ))}
       </tbody>
     </table>

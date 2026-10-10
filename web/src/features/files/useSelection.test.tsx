@@ -20,19 +20,19 @@ describe('useSelection', () => {
     expect(ids(result.current.selected)).toEqual(['d']);
   });
 
-  it('selectOnly replaces the selection, and clicking the only selected item again clears it', () => {
+  it('choose replaces the selection, and choosing the only selected item again keeps it', () => {
     const { result } = setup();
     act(() => result.current.toggle('a'));
     act(() => result.current.toggle('b'));
-    act(() => result.current.selectOnly('c'));
+    act(() => result.current.choose('c'));
     expect(ids(result.current.selected)).toEqual(['c']);
-    act(() => result.current.selectOnly('c'));
-    expect(result.current.selected.size).toBe(0);
+    act(() => result.current.choose('c'));
+    expect(ids(result.current.selected)).toEqual(['c']);
   });
 
   it('selects ranges from the last clicked item, in either direction', () => {
     const { result } = setup();
-    act(() => result.current.selectOnly('b'));
+    act(() => result.current.choose('b'));
     act(() => result.current.selectRange('d'));
     expect(ids(result.current.selected)).toEqual(['b', 'c', 'd']);
     act(() => result.current.selectRange('a'));

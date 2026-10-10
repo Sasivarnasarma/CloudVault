@@ -26,7 +26,7 @@ const entries: Entry[] = [
 function renderBrowser(overrides: Partial<React.ComponentProps<typeof FileBrowser>> = {}) {
   const handlers = {
     onOpenFolder: vi.fn(),
-    onSelectFile: vi.fn(),
+    onChoose: vi.fn(),
     onDownload: vi.fn(),
     onDelete: vi.fn(),
     onTransfer: vi.fn(),
@@ -34,6 +34,7 @@ function renderBrowser(overrides: Partial<React.ComponentProps<typeof FileBrowse
     onSelectRange: vi.fn(),
     onSelectAll: vi.fn(),
     onClearSelection: vi.fn(),
+    onGoUp: vi.fn(),
     dragIds: null as string[] | null,
     onDragStart: vi.fn(),
     onDragEnd: vi.fn(),
@@ -62,17 +63,34 @@ describe('FileBrowser (grid)', () => {
     expect(screen.getByText('2 KB · PDF')).toBeInTheDocument();
   });
 
-  it('opens a folder on a single click', async () => {
-    const { onOpenFolder, onSelectFile } = renderBrowser();
+  it('selects a folder on a single click and opens it on double click', async () => {
+    const { onOpenFolder, onChoose } = renderBrowser();
+    await userEvent.click(screen.getByText('Reports'));
+    expect(onChoose).toHaveBeenCalledWith('Reports/');
+    expect(onOpenFolder).not.toHaveBeenCalled();
+
+    await userEvent.dblClick(screen.getByText('Reports'));
+    expect(onOpenFolder).toHaveBeenCalledTimes(1);
+    expect(onOpenFolder).toHaveBeenCalledWith('Reports/');
+  });
+
+  it('opens a folder with one tap on a touch screen, which has no double click', async () => {
+    const match = vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query: string) => ({ matches: query === '(pointer: coarse)', media: query }) as MediaQueryList,
+    );
+    const { onOpenFolder, onChoose } = renderBrowser();
     await userEvent.click(screen.getByText('Reports'));
     expect(onOpenFolder).toHaveBeenCalledWith('Reports/');
-    expect(onSelectFile).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByText('report.pdf'));
+    expect(onChoose).toHaveBeenCalledWith('report.pdf');
+    match.mockRestore();
   });
 
   it('selects a file on click and downloads it on double click', async () => {
-    const { onSelectFile, onDownload } = renderBrowser();
+    const { onChoose, onDownload } = renderBrowser();
     await userEvent.click(screen.getByText('report.pdf'));
-    expect(onSelectFile).toHaveBeenCalledWith('report.pdf');
+    expect(onChoose).toHaveBeenCalledWith('report.pdf');
+    expect(onDownload).not.toHaveBeenCalled();
 
     await userEvent.dblClick(screen.getByText('report.pdf'));
     expect(onDownload).toHaveBeenCalledWith('report.pdf', 'report.pdf');
@@ -133,12 +151,15 @@ describe('FileBrowser (list)', () => {
     expect(within(folderRow).getAllByText('—')).toHaveLength(2);
   });
 
-  it('opens folders and selects files like the grid', async () => {
-    const { onOpenFolder, onSelectFile } = renderBrowser({ view: 'list' });
+  it('selects on click and opens folders on double click, like the grid', async () => {
+    const { onOpenFolder, onChoose } = renderBrowser({ view: 'list' });
     await userEvent.click(screen.getByText('Reports'));
+    expect(onChoose).toHaveBeenCalledWith('Reports/');
+    expect(onOpenFolder).not.toHaveBeenCalled();
+    await userEvent.dblClick(screen.getByText('Reports'));
     expect(onOpenFolder).toHaveBeenCalledWith('Reports/');
     await userEvent.click(screen.getByText('report.pdf'));
-    expect(onSelectFile).toHaveBeenCalledWith('report.pdf');
+    expect(onChoose).toHaveBeenLastCalledWith('report.pdf');
   });
 });
 

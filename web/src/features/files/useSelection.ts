@@ -37,9 +37,9 @@ export function useSelection(orderedIds: string[], resetKey: string) {
     anchor.current = id;
   }, []);
 
-  /** Select just this item; selecting the only selected item again clears it. */
-  const selectOnly = useCallback((id: string) => {
-    setSelected((prev) => (prev.size === 1 && prev.has(id) ? new Set() : new Set([id])));
+  /** Select just this item (click, arrow keys); an item that is already the only one stays selected. */
+  const choose = useCallback((id: string) => {
+    setSelected((prev) => (prev.size === 1 && prev.has(id) ? prev : new Set([id])));
     anchor.current = id;
   }, []);
 
@@ -85,5 +85,5 @@ export function useSelection(orderedIds: string[], resetKey: string) {
     [orderedIds],
   );
 
-  return { selected, toggle, selectOnly, selectRange, selectAll, clear, remove, replace };
+  return { selected, toggle, choose, selectRange, selectAll, clear, remove, replace };
 }

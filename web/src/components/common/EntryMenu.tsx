@@ -46,13 +46,14 @@ export function EntryContextMenu({ items, children }: { items: MenuItem[]; child
   );
 }
 
-export function EntryMoreMenu({ items, label }: { items: MenuItem[]; label: string }) {
+export function EntryMoreMenu({ items, label, tabbable = true }: { items: MenuItem[]; label: string; tabbable?: boolean }) {
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
           aria-label={`More actions for ${label}`}
+          tabIndex={tabbable ? undefined : -1}
           onClick={(e) => e.stopPropagation()}
           className="inline-flex size-8 items-center justify-center rounded-lg text-ink-3 transition hover:bg-sunken hover:text-ink data-[state=open]:bg-sunken data-[state=open]:text-ink"
         >

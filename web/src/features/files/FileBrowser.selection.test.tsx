@@ -17,11 +17,12 @@ const entries: Entry[] = [
 function renderBrowser(view: ViewMode, selected: string[] = []) {
   const h = {
     onOpenFolder: vi.fn(),
-    onSelectFile: vi.fn(),
     onToggleSelect: vi.fn(),
     onSelectRange: vi.fn(),
     onSelectAll: vi.fn(),
     onClearSelection: vi.fn(),
+    onChoose: vi.fn(),
+    onGoUp: vi.fn(),
     dragIds: null as string[] | null,
     onDragStart: vi.fn(),
     onDragEnd: vi.fn(),
@@ -44,7 +45,7 @@ describe.each(['grid', 'list'] as const)('FileBrowser selection (%s view)', (vie
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select a.txt' }));
     expect(h.onToggleSelect).toHaveBeenLastCalledWith('a.txt');
-    expect(h.onSelectFile).not.toHaveBeenCalled();
+    expect(h.onChoose).not.toHaveBeenCalled();
   });
 
   it('reflects which items are selected', () => {
@@ -68,16 +69,31 @@ describe.each(['grid', 'list'] as const)('FileBrowser selection (%s view)', (vie
     await user.keyboard('{/Shift}');
     expect(h.onSelectRange).toHaveBeenCalledWith('b.txt');
     expect(h.onOpenFolder).not.toHaveBeenCalled();
-    expect(h.onSelectFile).not.toHaveBeenCalled();
+    expect(h.onChoose).not.toHaveBeenCalled();
   });
 
-  it('keeps plain clicks as they were: folders open, files are selected alone', async () => {
+  it('selects an item alone on a plain click and only opens a folder on double click', async () => {
     const h = renderBrowser(view);
     await userEvent.click(screen.getByText('Reports'));
-    expect(h.onOpenFolder).toHaveBeenCalledWith('Reports/');
+    expect(h.onChoose).toHaveBeenLastCalledWith('Reports/');
+    expect(h.onOpenFolder).not.toHaveBeenCalled();
     await userEvent.click(screen.getByText('a.txt'));
-    expect(h.onSelectFile).toHaveBeenCalledWith('a.txt');
+    expect(h.onChoose).toHaveBeenLastCalledWith('a.txt');
     expect(h.onToggleSelect).not.toHaveBeenCalled();
+
+    await userEvent.dblClick(screen.getByText('Reports'));
+    expect(h.onOpenFolder).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not open or download anything on a Ctrl/Shift double click', async () => {
+    const h = renderBrowser(view);
+    const user = userEvent.setup();
+    await user.keyboard('{Control>}');
+    await user.dblClick(screen.getByText('Reports'));
+    await user.dblClick(screen.getByText('a.txt'));
+    await user.keyboard('{/Control}');
+    expect(h.onOpenFolder).not.toHaveBeenCalled();
+    expect(h.onDownload).not.toHaveBeenCalled();
   });
 });
 

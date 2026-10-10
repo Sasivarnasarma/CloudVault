@@ -115,7 +115,7 @@ describe('FilesPage', () => {
 
   it('opens a folder, updates the URL and shows its contents', async () => {
     const user = await renderPage();
-    await user.click(screen.getByText('Reports'));
+    await user.dblClick(screen.getByText('Reports'));
 
     expect(await screen.findByText('q1.pdf')).toBeInTheDocument();
     expect(window.location.search).toBe('?p=Reports');
@@ -133,7 +133,7 @@ describe('FilesPage', () => {
 
   it('goes back to the root with the breadcrumb', async () => {
     const user = await renderPage();
-    await user.click(screen.getByText('Reports'));
+    await user.dblClick(screen.getByText('Reports'));
     await screen.findByText('q1.pdf');
 
     await user.click(within(screen.getByRole('navigation', { name: 'Folder path' })).getByRole('button', { name: 'All files' }));
@@ -618,7 +618,7 @@ describe('FilesPage multi-select and bulk actions', () => {
     await check(user, 'report.pdf');
     await check(user, 'notes.md');
     expect(await screen.findByText('2 selected')).toBeInTheDocument();
-    await user.click(screen.getByText('Reports'));
+    await user.dblClick(screen.getByText('Reports'));
     await screen.findByText('q1.pdf');
     await waitFor(() => expect(screen.queryByRole('toolbar')).not.toBeInTheDocument());
   });
@@ -919,5 +919,78 @@ describe('FilesPage drag-move progress', () => {
     expect(await screen.findByText('Moved 1 file')).toBeInTheDocument();
     expect(await screen.findByText('Couldn’t move 1 of 2 items')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText('Moving 2 files…')).not.toBeInTheDocument());
+  });
+});
+
+
+describe('FilesPage keyboard navigation', () => {
+  const item = (name: string) => document.querySelector(`[data-entry-main] [title="${name}"]`)!.closest('[data-entry-main]') as HTMLElement;
+
+  it('selects files with the arrow keys and shows the details of the one under the cursor', async () => {
+    const user = await renderPage();
+    item('Photos').focus();
+    await user.keyboard('{ArrowDown}{ArrowDown}'); // Reports, notes.md
+    expect(item('notes.md')).toHaveFocus();
+    expect(await screen.findByRole('complementary', { name: 'File details' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Select notes.md' })).toHaveAttribute('aria-checked', 'true');
+
+    await user.keyboard('{ArrowDown}');
+    expect(item('photo.png')).toHaveFocus();
+    expect(screen.getByRole('checkbox', { name: 'Select notes.md' })).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByRole('checkbox', { name: 'Select photo.png' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('keeps a file selected when Enter is pressed on it', async () => {
+    const user = await renderPage();
+    item('notes.md').focus();
+    await user.keyboard('{ArrowDown}{ArrowUp}{Enter}');
+    expect(screen.getByRole('checkbox', { name: 'Select notes.md' })).toHaveAttribute('aria-checked', 'true');
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('checkbox', { name: 'Select notes.md' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('opens a folder with Enter and goes back up with Backspace', async () => {
+    const user = await renderPage();
+    item('Reports').focus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByText('q1.pdf')).toBeInTheDocument();
+    expect(window.location.search).toBe('?p=Reports');
+
+    await user.keyboard('{Backspace}');
+    expect(await screen.findByText('report.pdf')).toBeInTheDocument();
+    expect(window.location.search).toBe('');
+  });
+
+  it('goes up a folder with Alt+Up, and Backspace does nothing at the top', async () => {
+    window.history.replaceState(null, '', '/?p=Reports');
+    const user = userEvent.setup();
+    render(<FilesPage />);
+    await screen.findByText('q1.pdf');
+
+    await user.keyboard('{Alt>}{ArrowUp}{/Alt}');
+    expect(await screen.findByText('report.pdf')).toBeInTheDocument();
+    await user.keyboard('{Backspace}');
+    expect(window.location.search).toBe('');
+    expect(screen.getByText('report.pdf')).toBeInTheDocument();
+  });
+
+  it('does not navigate while typing in the search box', async () => {
+    window.history.replaceState(null, '', '/?p=Reports');
+    const user = userEvent.setup();
+    render(<FilesPage />);
+    await screen.findByText('q1.pdf');
+
+    await user.type(screen.getByPlaceholderText(/search/i), 'ab{Backspace}{Backspace}');
+    expect(window.location.search).toBe('?p=Reports');
+    expect(screen.getByText('q1.pdf')).toBeInTheDocument();
+  });
+
+  it('lets the arrow keys and Delete work together: select with the arrows, delete with Delete', async () => {
+    const user = await renderPage();
+    item('Photos').focus();
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+    await user.keyboard('{Delete}');
+    expect(await screen.findByRole('dialog', { name: 'Delete “notes.md”?' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveTextContent('notes.md');
   });
 });

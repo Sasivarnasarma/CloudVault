@@ -326,18 +326,22 @@ export function FilesPage() {
   };
 
   // Keyboard: "/" focuses search, Escape clears the selection, Ctrl/Cmd+A selects everything shown,
-  // Delete removes the selected items (after confirmation).
-  const keys = useRef({ clear: selection.clear, selectAll: selection.selectAll, selected: selectedEntries });
+  // Delete removes the selected items (after confirmation), Backspace / Alt+Up go to the parent folder.
+  // (The arrow keys, Home/End, Enter and type-to-find live in the file browser itself.)
+  const keys = useRef({ clear: selection.clear, selectAll: selection.selectAll, selected: selectedEntries, goUp: navigateUp });
   useEffect(() => {
-    keys.current = { clear: selection.clear, selectAll: selection.selectAll, selected: selectedEntries };
+    keys.current = { clear: selection.clear, selectAll: selection.selectAll, selected: selectedEntries, goUp: navigateUp };
   });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       const typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
-      if (typing || document.querySelector('[role="dialog"]')) return;
+      if (typing || e.defaultPrevented || document.querySelector('[role="dialog"]')) return;
 
-      if (e.key === '/') {
+      if (e.key === 'Backspace' || (e.altKey && e.key === 'ArrowUp')) {
+        e.preventDefault();
+        keys.current.goUp();
+      } else if (e.key === '/') {
         e.preventDefault();
         searchRef.current?.focus();
       } else if (e.key === 'Escape') {
@@ -466,11 +470,13 @@ export function FilesPage() {
                 sort={sort}
                 onSortChange={changeSort}
                 onOpenFolder={navigateToFolder}
-                onSelectFile={selection.selectOnly}
                 onToggleSelect={selection.toggle}
                 onSelectRange={selection.selectRange}
                 onSelectAll={selection.selectAll}
                 onClearSelection={selection.clear}
+                onChoose={selection.choose}
+                onGoUp={navigateUp}
+                onReachEnd={hasMore ? loadMore : undefined}
                 dragIds={dragIds}
                 busyIds={movingIds}
                 onDragStart={setDragIds}
@@ -595,8 +601,8 @@ export function FilesPage() {
       <ConfirmDialog
         open={!!bulkDelete}
         loading={bulkDeleting}
-        title={`Delete ${bulkDelete?.length ?? 0} items?`}
-        description={`${describeEntries(bulkDelete ?? [])} will be permanently deleted${
+        title={bulkDelete?.length === 1 ? `Delete “${bulkDelete[0].name}”?` : `Delete ${bulkDelete?.length ?? 0} items?`}
+        description={`${bulkDelete?.length === 1 ? `“${bulkDelete[0].name}”` : describeEntries(bulkDelete ?? [])} will be permanently deleted${
           bulkDelete?.some((e) => e.type === 'folder') ? ', including everything inside the folders' : ''
         }. This can’t be undone.`}
         confirmLabel="Delete"

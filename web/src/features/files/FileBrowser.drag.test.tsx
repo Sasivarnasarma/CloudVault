@@ -23,11 +23,12 @@ function renderBrowser(
 ) {
   const h = {
     onOpenFolder: vi.fn(),
-    onSelectFile: vi.fn(),
     onToggleSelect: vi.fn(),
     onSelectRange: vi.fn(),
     onSelectAll: vi.fn(),
     onClearSelection: vi.fn(),
+    onChoose: vi.fn(),
+    onGoUp: vi.fn(),
     onDragStart: vi.fn(),
     onDragEnd: vi.fn(),
     onDropOnFolder: vi.fn(),
