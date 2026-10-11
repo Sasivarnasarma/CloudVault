@@ -186,6 +186,39 @@ class TestRestore:
         with pytest.raises(ObjectNotFoundError):
             service.restore_from_trash(batch_id)
 
+    def test_restores_only_the_items_asked_for_and_keeps_the_rest_in_the_trash(self, service, s3):
+        batch, _ = service.move_to_trash([("file", "notes.md"), ("folder", "docs/")])
+
+        restored, failed = service.restore_from_trash(batch.id, ["docs/"])
+
+        assert (restored, failed) == (["docs/"], [])
+        assert "docs/a.txt" in s3.objects and "notes.md" not in s3.objects
+        (left,) = service.list_trash()
+        assert left.id == batch.id and [r.path for r in left.roots] == ["notes.md"]
+        assert service.restore_from_trash(batch.id, ["notes.md"]) == (["notes.md"], [])
+        assert trash_keys(s3) == []  # the batch is gone once its last item is back
+
+    def test_an_item_that_is_not_in_the_batch_is_reported_not_guessed(self, service, s3):
+        batch, _ = service.move_to_trash([("file", "notes.md")])
+
+        restored, failed = service.restore_from_trash(batch.id, ["other.txt"])
+
+        assert restored == []
+        assert [(f.path, f.error) for f in failed] == [
+            ("other.txt", "That item is not in this batch")
+        ]
+        assert "notes.md" not in s3.objects  # nothing else was restored
+
+    def test_an_item_whose_place_is_taken_stays_while_the_others_go_back(self, service, s3):
+        batch, _ = service.move_to_trash([("file", "notes.md"), ("folder", "docs/")])
+        s3.objects["notes.md"] = b"newer"
+
+        restored, failed = service.restore_from_trash(batch.id, ["notes.md", "docs/"])
+
+        assert restored == ["docs/"] and [f.path for f in failed] == ["notes.md"]
+        (left,) = service.list_trash()
+        assert [r.path for r in left.roots] == ["notes.md"]
+
 
 class TestPurge:
     def test_deletes_one_batch_for_good(self, service, s3):
@@ -197,6 +230,28 @@ class TestPurge:
         assert count == 4  # the three objects (one is an empty-folder marker) and the manifest
         assert [b.id for b in service.list_trash()] == [keep.id]
         assert not [k for k in trash_keys(s3) if gone.id in k]
+
+    def test_deletes_only_some_items_of_a_batch_and_keeps_the_rest(self, service, s3):
+        batch, _ = service.move_to_trash([("file", "notes.md"), ("folder", "docs/")])
+
+        count = service.purge_trash(batch.id, ["docs/"])
+
+        assert count == 3  # the folder's three objects; the batch itself stays
+        (left,) = service.list_trash()
+        assert [r.path for r in left.roots] == ["notes.md"]
+        assert s3.objects[f"{TRASH_PREFIX}{batch.id}/notes.md"] == b"hello"
+        assert not [k for k in trash_keys(s3) if "/docs/" in k]
+
+    def test_deleting_the_last_items_removes_the_whole_batch(self, service, s3):
+        batch, _ = service.move_to_trash([("file", "notes.md"), ("file", "other/keep.txt")])
+        service.purge_trash(batch.id, ["notes.md"])
+        service.purge_trash(batch.id, ["other/keep.txt"])
+        assert trash_keys(s3) == []
+
+    def test_deleting_items_that_are_not_in_the_batch_is_not_found(self, service):
+        batch, _ = service.move_to_trash([("file", "notes.md")])
+        with pytest.raises(ObjectNotFoundError):
+            service.purge_trash(batch.id, ["nothing.txt"])
 
     def test_empties_the_whole_trash_and_nothing_else(self, service, s3):
         service.move_to_trash([("file", "notes.md")])

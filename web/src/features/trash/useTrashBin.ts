@@ -58,10 +58,11 @@ export function useTrashBin({ onRestored }: Options) {
     [load],
   );
 
+  /** Put a batch back, or only some of its items. */
   const restore = useCallback(
-    (batch: TrashBatch) =>
+    (batch: TrashBatch, paths?: string[]) =>
       act(batch.id, async () => {
-        const { restored, failed } = await restoreFromTrash(batch.id);
+        const { restored, failed } = await (paths ? restoreFromTrash(batch.id, paths) : restoreFromTrash(batch.id));
         if (restored.length > 0) {
           toast.success(restored.length === 1 ? 'Restored 1 item' : `Restored ${restored.length} items`);
           onRestored();
@@ -73,10 +74,11 @@ export function useTrashBin({ onRestored }: Options) {
     [act, onRestored],
   );
 
+  /** Delete a batch for good, or only some of its items. */
   const remove = useCallback(
-    (batch: TrashBatch) =>
+    (batch: TrashBatch, paths?: string[]) =>
       act(batch.id, async () => {
-        await deleteFromTrash(batch.id);
+        await (paths ? deleteFromTrash(batch.id, paths) : deleteFromTrash(batch.id));
         toast.success('Deleted for good');
       }),
     [act],

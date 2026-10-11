@@ -443,11 +443,13 @@ class S3StorageService(BaseStorageService):
     def list_trash(self, limit: int = 200) -> list[TrashBatch]:
         return self._trash.list_trash(limit)
 
-    def restore_from_trash(self, batch_id: str) -> tuple[list[str], list[TrashFailure]]:
-        return self._trash.restore_from_trash(batch_id)
+    def restore_from_trash(
+        self, batch_id: str, paths: list[str] | None = None
+    ) -> tuple[list[str], list[TrashFailure]]:
+        return self._trash.restore_from_trash(batch_id, paths)
 
-    def purge_trash(self, batch_id: str | None = None) -> int:
-        return self._trash.purge_trash(batch_id)
+    def purge_trash(self, batch_id: str | None = None, paths: list[str] | None = None) -> int:
+        return self._trash.purge_trash(batch_id, paths)
 
     # --- presigned upload -----------------------------------------------------------
 

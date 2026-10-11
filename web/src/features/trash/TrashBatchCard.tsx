@@ -1,9 +1,12 @@
 import { RotateCcw, Trash2 } from 'lucide-react';
-import { Button } from '../../components/common/Button';
+import { Button, IconButton } from '../../components/common/Button';
 import { Spinner } from '../../components/common/Spinner';
 import { formatBytes, formatDate, formatRelativeDate } from '../../lib/formatters';
 import { FileIcon, FolderIcon } from '../files/FileIcon';
 import type { TrashBatch, TrashRoot } from '../../types';
+
+/** The name of a deleted item, without the folder it was in. */
+const rootName = (root: TrashRoot) => root.path.replace(/\/$/, '').split('/').pop() ?? root.path;
 
 /** Where a deleted item was: its folder, then its name. */
 function Location({ root }: { root: TrashRoot }) {
@@ -26,10 +29,22 @@ interface TrashBatchCardProps {
   disabled: boolean;
   onRestore: () => void;
   onDelete: () => void;
+  /** Restore or delete just one of the items (shown when the delete had several). */
+  onRestoreItem: (root: TrashRoot) => void;
+  onDeleteItem: (root: TrashRoot) => void;
 }
 
 /** One delete: what went to the trash together, when, and what to do with it. */
-export function TrashBatchCard({ batch, busy, disabled, onRestore, onDelete }: TrashBatchCardProps) {
+export function TrashBatchCard({
+  batch,
+  busy,
+  disabled,
+  onRestore,
+  onDelete,
+  onRestoreItem,
+  onDeleteItem,
+}: TrashBatchCardProps) {
+  const several = batch.roots.length > 1;
   return (
     <li
       aria-label={`Deleted ${formatDate(batch.deleted_at)}`}
@@ -74,6 +89,26 @@ export function TrashBatchCard({ batch, busy, disabled, onRestore, onDelete }: T
                 ? `${root.item_count} file${root.item_count === 1 ? '' : 's'} · ${formatBytes(root.size, 1)}`
                 : formatBytes(root.size, 1)}
             </span>
+            {several && (
+              <span className="flex shrink-0 items-center">
+                <IconButton
+                  label={`Restore ${rootName(root)}`}
+                  className="size-8"
+                  onClick={() => onRestoreItem(root)}
+                  disabled={disabled}
+                >
+                  <RotateCcw className="size-4" />
+                </IconButton>
+                <IconButton
+                  label={`Delete ${rootName(root)} forever`}
+                  className="size-8 hover:text-danger"
+                  onClick={() => onDeleteItem(root)}
+                  disabled={disabled}
+                >
+                  <Trash2 className="size-4" />
+                </IconButton>
+              </span>
+            )}
           </li>
         ))}
       </ul>

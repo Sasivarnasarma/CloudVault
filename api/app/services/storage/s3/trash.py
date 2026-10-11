@@ -231,7 +231,9 @@ class S3Trash:
             self._service._copy_one(key, key[len(base) :])
         self._service._delete_keys(keys)
 
-    def restore_from_trash(self, batch_id: str) -> tuple[list[str], list[TrashFailure]]:
+    def restore_from_trash(
+        self, batch_id: str, paths: list[str] | None = None
+    ) -> tuple[list[str], list[TrashFailure]]:
         check_batch_id(batch_id)
         base = data_prefix(batch_id)
         with storage_errors("restoring from the trash"):
@@ -241,8 +243,16 @@ class S3Trash:
 
         restored: list[str] = []
         failures: list[TrashFailure] = []
-        remaining: list[TrashRoot] = []
-        for root in batch.roots:
+        chosen = batch.roots if paths is None else [r for r in batch.roots if r.path in paths]
+        # Items that were not asked for stay in the trash, as do the ones that fail.
+        remaining: list[TrashRoot] = [r for r in batch.roots if r not in chosen]
+        known = {r.path for r in batch.roots}
+        failures.extend(
+            TrashFailure(path=p, error="That item is not in this batch")
+            for p in (paths or [])
+            if p not in known
+        )
+        for root in chosen:
             try:
                 with storage_errors("restoring from the trash"):
                     self._restore_root(root, base)
@@ -270,8 +280,35 @@ class S3Trash:
             raise StorageError(f"{len(failed)} items could not be deleted")
         return len(keys)
 
-    def purge_trash(self, batch_id: str | None = None) -> int:
+    def purge_trash(self, batch_id: str | None = None, paths: list[str] | None = None) -> int:
         with storage_errors("emptying the trash"):
             if batch_id is None:
                 return self._purge_keys(self._service._list_keys(TRASH_PREFIX))
-            return self._purge_keys(self._batch_keys(check_batch_id(batch_id)))
+            check_batch_id(batch_id)
+            if paths is None:
+                return self._purge_keys(self._batch_keys(batch_id))
+            return self._purge_items(batch_id, paths)
+
+    def _purge_items(self, batch_id: str, paths: list[str]) -> int:
+        """Delete some of the items of a batch for good, and keep the rest of it in the trash."""
+        batch = self._read_batch(batch_id)
+        if batch is None:
+            raise ObjectNotFoundError("That item is no longer in the trash")
+        chosen = [r for r in batch.roots if r.path in paths]
+        if not chosen:
+            raise ObjectNotFoundError("Those items are not in this batch")
+
+        base = data_prefix(batch_id)
+        keys: list[str] = []
+        for root in chosen:
+            keys += (
+                [base + root.path]
+                if root.type == "file"
+                else self._service._list_keys(base + root.path)
+            )
+        remaining = [r for r in batch.roots if r not in chosen]
+        if not remaining:
+            return self._purge_keys(self._batch_keys(batch_id))
+        count = self._purge_keys(keys)
+        self._write_manifest(batch_id, remaining)
+        return count

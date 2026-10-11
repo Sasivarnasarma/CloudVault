@@ -17,6 +17,12 @@ class TrashRequest(BaseModel):
     items: list[TrashItem] = Field(min_length=1, max_length=MAX_TRASH_ITEMS_PER_REQUEST)
 
 
+class TrashSelection(BaseModel):
+    """Some of the items of one deleted batch, by their original path."""
+
+    paths: list[str] = Field(min_length=1, max_length=MAX_TRASH_ITEMS_PER_REQUEST)
+
+
 class TrashRoot(BaseModel):
     """One file or folder that was deleted, as it was before."""
 

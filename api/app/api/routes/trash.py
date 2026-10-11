@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Query
 
+from app.core.limits import MAX_TRASH_ITEMS_PER_REQUEST
 from app.schemas.trash import (
     TrashListResponse,
     TrashMoveResponse,
     TrashPurgeResponse,
     TrashRequest,
     TrashRestoreResponse,
+    TrashSelection,
 )
 from app.services.storage.base import BaseStorageService
 from app.services.storage.factory import get_storage_service
@@ -53,20 +55,29 @@ def list_trash(storage: BaseStorageService = Depends(get_storage_service)):
 @router.post("/{batch_id}/restore", response_model=TrashRestoreResponse)
 def restore_from_trash(
     batch_id: str = Path(pattern=BATCH_ID_PATTERN),
+    selection: TrashSelection | None = None,
     storage: BaseStorageService = Depends(get_storage_service),
 ):
-    """Put a deleted batch back where it was. Never overwrites anything."""
-    restored, failed = storage.restore_from_trash(batch_id)
+    """Put a deleted batch back where it was, or only the items named in the body.
+
+    Never overwrites anything.
+    """
+    restored, failed = storage.restore_from_trash(batch_id, selection.paths if selection else None)
     return TrashRestoreResponse(restored=restored, failed=failed)
 
 
 @router.delete("/{batch_id}", response_model=TrashPurgeResponse)
 def delete_from_trash(
     batch_id: str = Path(pattern=BATCH_ID_PATTERN),
+    paths: list[str] | None = Query(
+        default=None,
+        max_length=MAX_TRASH_ITEMS_PER_REQUEST,
+        description="Delete only these items of the batch (their original paths)",
+    ),
     storage: BaseStorageService = Depends(get_storage_service),
 ):
-    """Delete one batch from the trash for good."""
-    return TrashPurgeResponse(deleted_count=storage.purge_trash(batch_id))
+    """Delete one batch from the trash for good, or only some of its items."""
+    return TrashPurgeResponse(deleted_count=storage.purge_trash(batch_id, paths))
 
 
 @router.delete("", response_model=TrashPurgeResponse)

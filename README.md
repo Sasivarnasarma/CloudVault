@@ -93,7 +93,7 @@ The coursework shaped the design, and its distributed-systems ideas are still vi
 
 - Deleting moves items to a reserved `.cloudvault-trash/` folder instead of erasing them. A toast offers **Undo**, and **Ctrl/⌘+Z** undoes the last delete.
 - **Moves, renames and pastes can be undone too**, from the toast or with **Ctrl/⌘+Z**, one change after another (the last 20 while the page stays open). Undoing a move puts items back without overwriting anything; undoing a paste that copied removes the copies. A copy that replaced an existing file can't be undone.
-- A **Trash page** restores items to where they were (never overwriting anything) or deletes them for good.
+- A **Trash page** restores items to where they were (never overwriting anything) or deletes them for good. When one delete covered several items, each can be restored or deleted on its own.
 - **Shift+Delete** deletes permanently after a confirmation.
 
 ### ⌨️ Desktop-style interaction
@@ -339,8 +339,8 @@ All routes live under `/api`. Interactive documentation is served at `/docs` whe
 | | `GET /uploads/multipart/parts` | Parts already stored (for resuming) |
 | | `POST /uploads/multipart/complete` · `/abort` | Assemble or discard an upload |
 | Trash | `POST /trash` · `GET /trash` | Move items to the trash, list the trash |
-| | `POST /trash/{id}/restore` | Restore a batch |
-| | `DELETE /trash/{id}` · `DELETE /trash` | Delete one batch, or empty the trash |
+| | `POST /trash/{id}/restore` | Restore a batch, or only the items named in the body (`{"paths": [...]}`) |
+| | `DELETE /trash/{id}` · `DELETE /trash` | Delete one batch (or only some of its items, `?paths=...`), or empty the trash |
 
 Errors are returned as predictable JSON with a user-safe message. Storage credentials, stack traces and provider internals are never included in responses.
 
@@ -416,4 +416,4 @@ Security notes:
 | Text preview | first 256 KB |
 | Search of the subfolders | stops after 300 matches or 50,000 objects read, and says so |
 
-Not built yet: authentication, restoring a single item from a deleted batch, progress for a single very large file, and touch drag-and-drop.
+Not built yet: authentication, progress for a single very large file, and touch drag-and-drop.

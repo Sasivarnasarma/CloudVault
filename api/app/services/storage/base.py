@@ -137,15 +137,19 @@ class BaseStorageService(ABC):
         """The newest batches in the trash, newest first."""
 
     @abstractmethod
-    def restore_from_trash(self, batch_id: str) -> tuple[list[str], list[TrashFailure]]:
-        """Put a batch back where it was. Never overwrites; what cannot go back stays in the trash.
+    def restore_from_trash(
+        self, batch_id: str, paths: list[str] | None = None
+    ) -> tuple[list[str], list[TrashFailure]]:
+        """Put a batch, or only the items of it named in `paths`, back where they were.
 
+        Never overwrites; what cannot go back stays in the trash.
         Raises ObjectNotFoundError if the batch is not in the trash.
         """
 
     @abstractmethod
-    def purge_trash(self, batch_id: str | None = None) -> int:
-        """Delete one batch for good, or everything in the trash. Returns how many objects went."""
+    def purge_trash(self, batch_id: str | None = None, paths: list[str] | None = None) -> int:
+        """Delete one batch (or only the items of it named in `paths`) for good, or everything in
+        the trash. Returns how many objects went."""
 
     # --- presigned upload -----------------------------------------------------------
 

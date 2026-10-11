@@ -134,6 +134,35 @@ describe('TrashView', () => {
     expect(await screen.findByText('Deleted for good')).toBeInTheDocument();
   });
 
+  it('restores one item of a delete that had several, and leaves the rest', async () => {
+    const { user, onRestored } = setup();
+    await screen.findByText('3 items · 3 KB');
+
+    await user.click(within(card('a')).getByRole('button', { name: 'Restore report.pdf' }));
+
+    await waitFor(() => expect(restoreFromTrash).toHaveBeenCalledWith(BATCH_A.id, ['docs/report.pdf']));
+    expect(onRestored).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks before deleting one item for good, and names it', async () => {
+    const { user } = setup();
+    await screen.findByText('3 items · 3 KB');
+    await user.click(within(card('a')).getByRole('button', { name: 'Delete photos forever' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Delete forever?' });
+    expect(within(dialog).getByText('“photos” will be permanently deleted. This can’t be undone.')).toBeInTheDocument();
+    expect(deleteFromTrash).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole('button', { name: 'Delete forever' }));
+    await waitFor(() => expect(deleteFromTrash).toHaveBeenCalledWith(BATCH_A.id, ['photos/']));
+  });
+
+  it('has no per-item buttons when a delete was a single item', async () => {
+    setup();
+    await screen.findByText('3 items · 3 KB');
+    expect(within(card('b')).queryByRole('button', { name: /Restore notes/ })).not.toBeInTheDocument();
+    expect(within(card('a')).getByRole('button', { name: 'Restore photos' })).toBeInTheDocument();
+  });
+
   it('does nothing when deleting for good is cancelled', async () => {
     const { user } = setup();
     await screen.findByText('3 items · 3 KB');

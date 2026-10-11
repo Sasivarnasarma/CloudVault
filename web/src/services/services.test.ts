@@ -396,6 +396,17 @@ describe('trashService', () => {
     expect(lastCall().init?.method).toBe('DELETE');
   });
 
+  it('restores or deletes only the named items of a batch', async () => {
+    fetchMock.mockImplementation(async () => jsonResponse({ restored: [], failed: [], deleted_count: 0 }));
+    await restoreFromTrash('20260101T000000Z-abc123', ['a.txt', 'docs/']);
+    expect(lastCall().url).toBe('/api/trash/20260101T000000Z-abc123/restore');
+    expect(JSON.parse(String(lastCall().init?.body))).toEqual({ paths: ['a.txt', 'docs/'] });
+
+    await deleteFromTrash('20260101T000000Z-abc123', ['a b.txt', 'docs/']);
+    expect(lastCall().url).toBe('/api/trash/20260101T000000Z-abc123?paths=a+b.txt&paths=docs%2F');
+    expect(lastCall().init?.method).toBe('DELETE');
+  });
+
   it('turns an error answer into the message from the API', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ detail: 'That item is no longer in the trash' }, 404));
     await expect(restoreFromTrash('20260101T000000Z-abc123')).rejects.toThrow('no longer in the trash');

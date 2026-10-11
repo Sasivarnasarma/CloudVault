@@ -4,7 +4,7 @@ import { Button, IconButton } from '../../components/common/Button';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { StateMessage } from '../../components/common/StateMessage';
 import { formatBytes } from '../../lib/formatters';
-import type { TrashBatch } from '../../types';
+import type { TrashBatch, TrashRoot } from '../../types';
 import { FileSkeleton } from '../files/FileSkeleton';
 import { TrashBatchCard } from './TrashBatchCard';
 import { useTrashBin } from './useTrashBin';
@@ -17,8 +17,10 @@ interface TrashViewProps {
 /** The trash: everything that was deleted, with Restore, Delete forever and Empty trash. */
 export function TrashView({ onRestored, onOpenNav }: TrashViewProps) {
   const trash = useTrashBin({ onRestored });
-  // What the user is being asked to confirm: one batch, or all of them.
-  const [confirming, setConfirming] = useState<TrashBatch | 'all' | null>(null);
+  // What the user is being asked to confirm: one batch, one item of a batch, or all of them.
+  const [confirming, setConfirming] = useState<TrashBatch | { batch: TrashBatch; root: TrashRoot } | 'all' | null>(
+    null,
+  );
 
   const itemCount = trash.batches.reduce((sum, b) => sum + b.roots.length, 0);
   const working = trash.busyId !== null;
@@ -27,6 +29,7 @@ export function TrashView({ onRestored, onOpenNav }: TrashViewProps) {
     const target = confirming;
     setConfirming(null);
     if (target === 'all') await trash.empty();
+    else if (target && 'root' in target) await trash.remove(target.batch, [target.root.path]);
     else if (target) await trash.remove(target);
   };
 
@@ -79,6 +82,8 @@ export function TrashView({ onRestored, onOpenNav }: TrashViewProps) {
                 disabled={working}
                 onRestore={() => void trash.restore(batch)}
                 onDelete={() => setConfirming(batch)}
+                onRestoreItem={(root) => void trash.restore(batch, [root.path])}
+                onDeleteItem={(root) => setConfirming({ batch, root })}
               />
             ))}
           </ul>
@@ -91,7 +96,9 @@ export function TrashView({ onRestored, onOpenNav }: TrashViewProps) {
         description={
           confirming === 'all'
             ? `Everything in the trash (${itemCount} item${itemCount === 1 ? '' : 's'}) will be permanently deleted. This can’t be undone.`
-            : 'These items will be permanently deleted. This can’t be undone.'
+            : confirming && 'root' in confirming
+              ? `“${confirming.root.path.replace(/\/$/, '').split('/').pop()}” will be permanently deleted. This can’t be undone.`
+              : 'These items will be permanently deleted. This can’t be undone.'
         }
         confirmLabel={confirming === 'all' ? 'Empty trash' : 'Delete forever'}
         onConfirm={() => void confirm()}

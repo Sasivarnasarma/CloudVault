@@ -161,14 +161,14 @@ class FakeStorage(BaseStorageService):
         root = TrashRoot(path="a.txt", type="file", size=5, item_count=1)
         return [TrashBatch(id=BATCH, deleted_at=NOW, roots=[root], total_size=5)]
 
-    def restore_from_trash(self, batch_id):
-        self.calls.append(("restore", batch_id))
+    def restore_from_trash(self, batch_id, paths=None):
+        self.calls.append(("restore", batch_id) if paths is None else ("restore", batch_id, paths))
         if self.fail_with:
             raise self.fail_with
         return ["a.txt"], self.trash_failures
 
-    def purge_trash(self, batch_id=None):
-        self.calls.append(("purge", str(batch_id)))
+    def purge_trash(self, batch_id=None, paths=None):
+        self.calls.append(("purge", str(batch_id)) if paths is None else ("purge", batch_id, paths))
         return 3
 
     def list_folder_tree(self, prefix, max_files):
@@ -780,6 +780,14 @@ class TestTrashRoutes:
         assert res.json() == {"restored": ["a.txt"], "failed": []}
         assert ("restore", BATCH) in storage.calls
 
+    def test_restores_only_the_items_named(self, client, storage):
+        res = client.post(f"/api/trash/{BATCH}/restore", json={"paths": ["a.txt", "docs/"]})
+        assert res.status_code == 200
+        assert ("restore", BATCH, ["a.txt", "docs/"]) in storage.calls
+
+    def test_restoring_needs_at_least_one_path_when_a_list_is_sent(self, client):
+        assert client.post(f"/api/trash/{BATCH}/restore", json={"paths": []}).status_code == 422
+
     def test_restore_passes_on_what_could_not_go_back(self, client, storage):
         storage.trash_failures = [TrashFailure(path="a.txt", error="Something already exists")]
         assert client.post(f"/api/trash/{BATCH}/restore").json()["failed"][0]["path"] == "a.txt"
@@ -799,6 +807,11 @@ class TestTrashRoutes:
         res = client.delete(f"/api/trash/{BATCH}")
         assert res.json() == {"deleted_count": 3}
         assert ("purge", BATCH) in storage.calls
+
+    def test_deletes_only_some_items_of_a_batch(self, client, storage):
+        res = client.delete(f"/api/trash/{BATCH}", params=[("paths", "a.txt"), ("paths", "docs/")])
+        assert res.json() == {"deleted_count": 3}
+        assert ("purge", BATCH, ["a.txt", "docs/"]) in storage.calls
 
     def test_empties_the_trash(self, client, storage):
         assert client.delete("/api/trash").json() == {"deleted_count": 3}
