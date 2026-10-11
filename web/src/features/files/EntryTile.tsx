@@ -32,6 +32,7 @@ export function EntryTile({ entry, index, selected, selection, handlers: h, drag
           (dnd.dragging || cut) && 'opacity-40',
           dnd.busy && 'pointer-events-none',
           dnd.over && 'border-accent bg-accent-soft ring-2 ring-accent',
+          'data-[touch-over]:border-accent data-[touch-over]:bg-accent-soft data-[touch-over]:ring-2 data-[touch-over]:ring-accent',
         )}
         aria-busy={dnd.busy || undefined}
       >

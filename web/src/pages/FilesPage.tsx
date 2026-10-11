@@ -292,6 +292,7 @@ export function FilesPage() {
                     cutIds={clipboard.cutIds}
                     onDragStart={drag.startDrag}
                     onDragEnd={drag.endDrag}
+                    onTouchDragStart={drag.startTouchDrag}
                     onDropOnFolder={drag.dropOn}
                     onDownload={downloadFile}
                     onPreview={(file) => setPreviewKey(file.key)}

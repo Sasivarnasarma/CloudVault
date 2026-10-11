@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, type PointerEvent } from 'react';
 import type { Entry } from '../../lib/entries';
 import type { Transfers } from './useTransfers';
+import { useTouchDrag } from './useTouchDrag';
 
 /** Dragging entries onto a folder (a tile, the path above the list or the up button) moves them there. */
 export function useDragMove({
@@ -23,5 +24,17 @@ export function useDragMove({
     await run(moving, 'move', destinationPrefix);
   };
 
-  return { dragIds, startDrag: setDragIds, endDrag: () => setDragIds(null), dropOn };
+  const touch = useTouchDrag({
+    onStart: setDragIds,
+    onDrop: (prefix) => void dropOn(prefix),
+    onCancel: () => setDragIds(null),
+  });
+
+  /** Start dragging with a finger: the items move once the finger is lifted over a folder. */
+  const startTouchDrag = (event: PointerEvent, ids: string[]) => {
+    const names = entries.filter((e) => ids.includes(e.id)).map((e) => e.name);
+    touch.begin(event, ids, names.length === 1 ? names[0] : `${names.length} items`);
+  };
+
+  return { dragIds, startDrag: setDragIds, endDrag: () => setDragIds(null), startTouchDrag, dropOn };
 }

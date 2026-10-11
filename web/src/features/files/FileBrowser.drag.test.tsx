@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ENTRY_DRAG_TYPE } from '../../lib/dragMove';
 import type { Entry } from '../../lib/entries';
 import { desktopFilesData, entryDragData, makeDataTransfer } from '../../test/dataTransfer';
@@ -35,6 +35,7 @@ function renderBrowser(
     onGoUp: vi.fn(),
     onDragStart: vi.fn(),
     onDragEnd: vi.fn(),
+    onTouchDragStart: vi.fn(),
     onDropOnFolder: vi.fn(),
     onDownload: vi.fn(),
     onPreview: vi.fn(),
@@ -137,5 +138,59 @@ describe.each(['grid', 'list'] as const)('FileBrowser drag and drop (%s view)', 
     expect(fireEvent.dragOver(item('Reports'), { dataTransfer })).toBe(true);
     fireEvent.drop(item('Reports'), { dataTransfer });
     expect(h.onDropOnFolder).not.toHaveBeenCalled();
+  });
+});
+
+describe.each(['grid', 'list'] as const)('FileBrowser drag and drop with a finger (%s view)', (view) => {
+  class TouchPointerEvent extends MouseEvent {
+    pointerType: string;
+    pointerId = 1;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, { bubbles: true, ...init });
+      this.pointerType = init.pointerType ?? 'touch';
+    }
+  }
+  const tile = (name: string) => screen.getByText(name).closest('[data-entry-id]') as HTMLElement;
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('hands a finger that goes down on an item to the page, with the selection when it is part of one', () => {
+    vi.stubGlobal('PointerEvent', TouchPointerEvent);
+    const h = renderBrowser(view, { selected: ['a.txt', 'Photos/'] });
+    fireEvent.pointerDown(tile('a.txt'), { pointerType: 'touch' });
+    expect(h.onTouchDragStart).toHaveBeenLastCalledWith(expect.anything(), ['a.txt', 'Photos/']);
+
+    fireEvent.pointerDown(tile('b.txt'), { pointerType: 'touch' });
+    expect(h.onTouchDragStart).toHaveBeenLastCalledWith(expect.anything(), ['b.txt']);
+  });
+
+  it('leaves the mouse to the browser’s own drag and drop', () => {
+    vi.stubGlobal('PointerEvent', TouchPointerEvent);
+    const h = renderBrowser(view);
+    fireEvent.pointerDown(tile('a.txt'), { pointerType: 'mouse' });
+    expect(h.onTouchDragStart).not.toHaveBeenCalled();
+  });
+
+  it('turns the browser’s drag off on a touch screen, so it does not fight with the finger', () => {
+    const real = window.matchMedia;
+    window.matchMedia = ((query: string) => ({ ...real(query), matches: query === '(pointer: coarse)' })) as never;
+    try {
+      renderBrowser(view);
+      expect(tile('a.txt')).toHaveAttribute('draggable', 'false');
+    } finally {
+      window.matchMedia = real;
+    }
+  });
+
+  it('lets a finger find the folder it is over, but only while something is being dragged', () => {
+    renderBrowser(view, { dragIds: ['a.txt'] });
+    expect(tile('Reports')).toHaveAttribute('data-drop-prefix', 'Reports/');
+    expect(tile('b.txt')).not.toHaveAttribute('data-drop-prefix');
+    expect(tile('Photos')).toHaveAttribute('data-drop-prefix', 'Photos/');
+  });
+
+  it('does not offer the folder being dragged, or anything while nothing is dragged', () => {
+    renderBrowser(view, { dragIds: ['Photos/'] });
+    expect(tile('Photos')).not.toHaveAttribute('data-drop-prefix');
   });
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FocusEvent, type RefObject } from 'react';
 import type { Entry } from '../../lib/entries';
+import { scrollParent } from '../../lib/dom';
 import { canPreview } from '../../lib/previewKind';
 import type { FileObject } from '../../types';
 import {
@@ -45,14 +46,6 @@ function findItem(root: HTMLElement, id: string): HTMLElement | undefined {
 function gridColumns(root: HTMLElement): number {
   const tracks = window.getComputedStyle(root).gridTemplateColumns.split(' ').filter(Boolean);
   return Math.max(1, tracks.length);
-}
-
-function scrollParent(el: HTMLElement): HTMLElement | null {
-  for (let node = el.parentElement; node; node = node.parentElement) {
-    const overflow = window.getComputedStyle(node).overflowY;
-    if (overflow === 'auto' || overflow === 'scroll') return node;
-  }
-  return null;
 }
 
 /** Items that fit on screen, so PageUp / PageDown move about one screenful. */

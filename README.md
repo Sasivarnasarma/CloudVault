@@ -65,7 +65,7 @@ The coursework shaped the design, and its distributed-systems ideas are still vi
 - Grid and list views, sorting, instant filter-as-you-type search, and category filters (documents, images, media).
 - **Search the folder or everything below it:** filtering is instant for the open folder, and a toggle extends the search to all subfolders (files and folders by name, with where each result lives). The search is kept in the address (`?p=docs&q=report&deep=1`), so it can be bookmarked, shared or reloaded.
 - Breadcrumb navigation with the folder shown in the URL, so back, forward and bookmarks work.
-- Create, rename, move and copy files **and whole folders**; drag items onto a folder to move them. Folder copies and moves show how many files are done and can be **stopped**, which removes what was copied so far.
+- Create, rename, move and copy files **and whole folders**; drag items onto a folder to move them (on a touch screen, press and hold an item for a moment, then drag it onto a folder, a folder in the path or the up button; holding near the top or bottom of the list scrolls it). Folder copies and moves show how many files are done and can be **stopped**, which removes what was copied so far.
 - Multi-select with click, Ctrl/⌘+click, Shift+click, select all and invert selection.
 - A details panel with size, type, modified date, ETag, object key and the real content type read from storage.
 - Paginated listings that load more as you reach the end of a large folder.
@@ -416,4 +416,4 @@ Security notes:
 | Text preview | first 256 KB |
 | Search of the subfolders | stops after 300 matches or 50,000 objects read, and says so |
 
-Not built yet: authentication, progress for a single very large file, and touch drag-and-drop.
+Not built yet: authentication, and progress for a single very large file.

@@ -1,4 +1,4 @@
-import type { DragEvent } from 'react';
+import type { DragEvent, PointerEvent } from 'react';
 import { useDropTarget } from '../../hooks/useDropTarget';
 import { setEntryDrag } from '../../lib/dragMove';
 import type { Entry } from '../../lib/entries';
@@ -15,8 +15,14 @@ export function useEntryDnd(entry: Entry, selection: ReadonlySet<string>, d: Dra
     onDrop: () => entry.type === 'folder' && d.onDropOnFolder(entry.folder.prefix),
   });
 
+  // Touch screens drag with a finger instead (see useTouchDrag), so the browser's drag stays off.
+  const touchScreen = window.matchMedia?.('(pointer: coarse)').matches ?? false;
   const dragProps = {
-    draggable: !busy,
+    draggable: !busy && !touchScreen,
+    onPointerDown: (e: PointerEvent) => {
+      if (busy || e.pointerType !== 'touch' || !d.onTouchDragStart) return;
+      d.onTouchDragStart(e, selection.has(entry.id) ? [...selection] : [entry.id]);
+    },
     onDragStart: (e: DragEvent) => {
       // Dragging part of a multi-selection moves the whole selection; otherwise just this item.
       const ids = selection.has(entry.id) ? [...selection] : [entry.id];
@@ -26,5 +32,8 @@ export function useEntryDnd(entry: Entry, selection: ReadonlySet<string>, d: Dra
     onDragEnd: d.onDragEnd,
   };
 
-  return { dragging, busy, over: drop.over, dropHandlers: drop.handlers, dragProps };
+  // A finger dragged over this folder finds it by this attribute.
+  const dropAttrs = accepts && entry.type === 'folder' ? { 'data-drop-prefix': entry.folder.prefix } : {};
+
+  return { dragging, busy, over: drop.over, dropHandlers: { ...drop.handlers, ...dropAttrs }, dragProps };
 }

@@ -40,10 +40,11 @@ export function FileBrowser(props: FileBrowserProps) {
     busyIds,
     onDragStart,
     onDragEnd,
+    onTouchDragStart,
     onDropOnFolder,
     ...handlers
   } = props;
-  const drag: DragHandlers = { dragIds, busyIds, onDragStart, onDragEnd, onDropOnFolder };
+  const drag: DragHandlers = { dragIds, busyIds, onDragStart, onDragEnd, onTouchDragStart, onDropOnFolder };
 
   const containerRef = useRef<HTMLElement | null>(null);
   const setContainer = useCallback((el: HTMLElement | null) => {

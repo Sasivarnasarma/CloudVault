@@ -28,6 +28,7 @@ export function EntryRow({ entry, index, selected, selection, handlers: h, drag,
           (dnd.dragging || cut) && 'opacity-40',
           dnd.busy && 'pointer-events-none opacity-60',
           dnd.over && 'bg-accent-soft outline-2 -outline-offset-2 outline-accent',
+          'data-[touch-over]:bg-accent-soft data-[touch-over]:outline-2 data-[touch-over]:-outline-offset-2 data-[touch-over]:outline-accent',
         )}
         aria-busy={dnd.busy || undefined}
       >

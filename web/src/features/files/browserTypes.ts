@@ -1,3 +1,4 @@
+import type { PointerEvent } from 'react';
 import type { Entry, SortDir, SortKey, TransferMode } from '../../lib/entries';
 import type { FileObject } from '../../types';
 
@@ -41,6 +42,8 @@ export interface DragHandlers {
   busyIds?: readonly string[];
   onDragStart: (ids: string[]) => void;
   onDragEnd: () => void;
+  /** A finger went down on an entry (drag and drop with touch, which the browser's own can't do). */
+  onTouchDragStart?: (event: PointerEvent, ids: string[]) => void;
   /** The dragged entries were dropped on this folder. */
   onDropOnFolder: (prefix: string) => void;
 }

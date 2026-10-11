@@ -59,7 +59,11 @@ function UpButton({
       onClick={onNavigateUp}
       disabled={!currentPrefix}
       {...drop.handlers}
-      className={cn(drop.over && 'bg-accent-soft text-accent ring-2 ring-accent')}
+      {...(dragActive && currentPrefix && onDropToPrefix ? { 'data-drop-prefix': parentPrefix(currentPrefix) } : {})}
+      className={cn(
+        drop.over && 'bg-accent-soft text-accent ring-2 ring-accent',
+        'data-[touch-over]:bg-accent-soft data-[touch-over]:text-accent data-[touch-over]:ring-2 data-[touch-over]:ring-accent',
+      )}
     >
       <ArrowUp className="size-4" />
     </IconButton>

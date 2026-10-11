@@ -29,8 +29,10 @@ function Crumb({ label, prefix, current, dropEnabled, onNavigate, onDropToPrefix
       onClick={() => onNavigate(prefix)}
       aria-current={current ? 'page' : undefined}
       {...drop.handlers}
+      {...(dropEnabled ? { 'data-drop-prefix': prefix } : {})}
       className={cn(
         'max-w-48 truncate rounded-md px-2 py-1 text-sm transition',
+        'data-[touch-over]:bg-accent-soft data-[touch-over]:text-accent data-[touch-over]:ring-2 data-[touch-over]:ring-accent',
         current ? 'font-semibold text-ink' : 'text-ink-3 hover:bg-sunken hover:text-ink',
         drop.over && 'bg-accent-soft text-accent ring-2 ring-accent',
       )}
