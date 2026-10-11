@@ -39,6 +39,10 @@ export default defineConfig(({ mode }) => {
       setupFiles: ['./src/test/setup.ts'],
       include: ['src/**/*.test.{ts,tsx}'],
       css: false,
+      // Each test file runs in its own isolated context inside a shared worker, which starts much
+      // faster than a fresh process or environment per file (the whole suite takes about half the time).
+      // Node's web streams are added in src/test/setup.ts, as that context doesn't have them.
+      pool: 'vmThreads',
       testTimeout: 15000,
     },
   };
