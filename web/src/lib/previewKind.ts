@@ -55,3 +55,6 @@ export function previewKindOf(file: Pick<FileObject, 'name' | 'content_type'>): 
 }
 
 export const canPreview = (file: Pick<FileObject, 'name' | 'content_type'>) => previewKindOf(file) !== null;
+
+/** Markdown files are shown formatted, with the plain text a click away. */
+export const isMarkdown = (name: string) => ['md', 'markdown'].includes(extensionOf(name));

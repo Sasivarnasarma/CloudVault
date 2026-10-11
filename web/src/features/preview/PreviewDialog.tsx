@@ -1,13 +1,19 @@
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Button, IconButton } from '../../components/common/Button';
 import { Dialog } from '../../components/common/Dialog';
 import { Spinner } from '../../components/common/Spinner';
 import { formatBytes } from '../../lib/formatters';
-import { previewKindOf, type PreviewKind } from '../../lib/previewKind';
+import { cn } from '../../lib/cn';
+import { isMarkdown, previewKindOf, type PreviewKind } from '../../lib/previewKind';
 import { requestPresignedDownload } from '../../services/objectService';
 import type { FileObject } from '../../types';
+import { CodeView } from './CodeView';
+import { languageFor } from './highlight';
 import { readTextHead, type TextHead } from './readTextHead';
+
+// The Markdown renderer is a sizeable library, fetched only when a Markdown file is previewed.
+const MarkdownView = lazy(() => import('./MarkdownView'));
 
 /** How much of a text file is shown. */
 export const TEXT_PREVIEW_BYTES = 256 * 1024;
@@ -41,8 +47,10 @@ function Message({ children }: { children: React.ReactNode }) {
   return <p className="px-6 text-center text-sm text-ink-3">{children}</p>;
 }
 
-function TextBody({ url }: { url: string }) {
+function TextBody({ url, name }: { url: string; name: string }) {
   const [state, setState] = useState<{ head: TextHead } | { failed: true } | null>(null);
+  const markdown = isMarkdown(name);
+  const [showSource, setShowSource] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -56,15 +64,37 @@ function TextBody({ url }: { url: string }) {
   if ('failed' in state) return <Message>Couldn’t read this file. Try downloading it instead.</Message>;
   const { text, truncated } = state.head;
   if (text.includes('\u0000')) return <Message>This file isn’t text, so it can’t be previewed.</Message>;
+  const formatted = markdown && !showSource;
   return (
     <div className="flex size-full flex-col">
-      <pre
-        tabIndex={0}
-        aria-label="File contents"
-        className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-4 font-mono text-xs leading-relaxed text-ink"
-      >
-        {text || ' '}
-      </pre>
+      {markdown && (
+        <div role="group" aria-label="Show" className="flex gap-1 border-b border-line p-2">
+          {[
+            { label: 'Formatted', on: formatted, set: () => setShowSource(false) },
+            { label: 'Source', on: !formatted, set: () => setShowSource(true) },
+          ].map(({ label, on, set }) => (
+            <button
+              key={label}
+              type="button"
+              aria-pressed={on}
+              onClick={set}
+              className={cn(
+                'rounded-md px-2.5 py-1 text-xs font-medium transition',
+                on ? 'bg-surface-2 text-ink shadow-card' : 'text-ink-3 hover:text-ink',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {formatted ? (
+        <Suspense fallback={<Spinner className="m-auto size-5 text-ink-3" aria-label="Loading preview" />}>
+          <MarkdownView text={text} />
+        </Suspense>
+      ) : (
+        <CodeView text={text} language={languageFor(name)} />
+      )}
       {truncated && (
         <p className="border-t border-line px-4 py-2 text-xs text-ink-3">
           Showing the first {formatBytes(TEXT_PREVIEW_BYTES)}. Download the file to see the rest.
@@ -89,7 +119,7 @@ function Viewer({ file, kind, url }: { file: FileObject; kind: PreviewKind; url:
     case 'pdf':
       return <iframe src={url} title={file.name} className="size-full border-0 bg-white" />;
     case 'text':
-      return <TextBody url={url} />;
+      return <TextBody url={url} name={file.name} />;
   }
 }
 

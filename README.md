@@ -82,6 +82,8 @@ The coursework shaped the design, and its distributed-systems ideas are still vi
 
 - Double-click or press Enter to preview **images, video, audio, PDFs and text or code** without downloading.
 - Step through the other previewable files in the folder with ← / →.
+- **Markdown is shown formatted** (headings, lists, tables, task lists, code), with the source one click away. Pictures and raw HTML inside the file are never loaded or run.
+- **Code is syntax coloured** (Python, JavaScript, TypeScript, JSON, YAML, SQL, shell, Go, Rust, Java, C and C++, HTML and XML, CSS and more). The colouring and the Markdown renderer load only when you preview such a file.
 - Long text files show their first 256 KB and stop downloading there.
 
 ### ⬇️ Downloads
@@ -266,7 +268,7 @@ Nothing leaves the trash on its own, and an interrupted multipart upload leaves 
 
 ### Previews
 
-Double-click a file, or press Enter on it, to look at it without downloading: images, video, audio, PDFs and text or code (the first 256 KB). The arrow keys or the on-screen buttons step through the other previewable files in the folder. The browser reads the file straight from storage, so what it can show depends on your browser and on the content type stored with the file. Files it cannot show are downloaded on double-click.
+Double-click a file, or press Enter on it, to look at it without downloading: images, video, audio, PDFs and text or code (the first 256 KB). The arrow keys or the on-screen buttons step through the other previewable files in the folder. The browser reads the file straight from storage, so what it can show depends on your browser and on the content type stored with the file. Files it cannot show are downloaded on double-click. Markdown files open formatted (use **Source** to see the text), and code is syntax coloured.
 
 ### Resuming uploads
 

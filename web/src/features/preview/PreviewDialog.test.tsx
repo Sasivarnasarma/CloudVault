@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFile } from '../../test/fixtures';
 import { PreviewDialog, TEXT_PREVIEW_BYTES } from './PreviewDialog';
 
@@ -26,6 +26,12 @@ function stubText(text: string) {
     vi.fn(async () => new Response(text)),
   );
 }
+
+// The Markdown renderer and the highlighter are loaded on demand; loading them here keeps the tests
+// from racing the first, slow import when many test files run at once.
+beforeAll(async () => {
+  await Promise.all([import('./MarkdownView'), import('./highlight').then((m) => m.highlight('x', 'python'))]);
+}, 60_000);
 
 beforeEach(() => {
   vi.mocked(requestPresignedDownload)
@@ -118,5 +124,63 @@ describe('PreviewDialog', () => {
     expect(h.onDownload).toHaveBeenCalledWith('photo.png', 'photo.png');
     await user.keyboard('{Escape}');
     expect(h.onClose).toHaveBeenCalled();
+  });
+
+  it('shows a Markdown file formatted, with the source one click away', async () => {
+    const user = userEvent.setup();
+    stubText('# Release notes\n\n- **fast** search\n');
+    const readme = makeFile('README.md', { content_type: 'text/markdown' });
+    render(
+      <PreviewDialog
+        files={[readme]}
+        currentKey={readme.key}
+        onChange={vi.fn()}
+        onClose={vi.fn()}
+        onDownload={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Release notes' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Formatted' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(screen.getByRole('button', { name: 'Source' }));
+    expect(screen.queryByRole('heading', { name: 'Release notes' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('File contents')).toHaveTextContent('# Release notes');
+    expect(screen.getByRole('button', { name: 'Source' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(screen.getByRole('button', { name: 'Formatted' }));
+    expect(await screen.findByRole('heading', { name: 'Release notes' })).toBeInTheDocument();
+  });
+
+  it('colours the syntax of a code file', async () => {
+    stubText('def run():\n    return 1\n');
+    const script = makeFile('run.py', { content_type: 'text/x-python' });
+    render(
+      <PreviewDialog
+        files={[script]}
+        currentKey={script.key}
+        onChange={vi.fn()}
+        onClose={vi.fn()}
+        onDownload={vi.fn()}
+      />,
+    );
+
+    const box = await screen.findByLabelText('File contents');
+    await waitFor(() => expect(box.querySelector('.hljs-keyword')).toHaveTextContent('def'));
+  });
+
+  it('offers no Formatted / Source switch for files that are not Markdown', async () => {
+    stubText('plain');
+    render(
+      <PreviewDialog
+        files={[notes]}
+        currentKey={notes.key}
+        onChange={vi.fn()}
+        onClose={vi.fn()}
+        onDownload={vi.fn()}
+      />,
+    );
+    await screen.findByLabelText('File contents');
+    expect(screen.queryByRole('button', { name: 'Formatted' })).not.toBeInTheDocument();
   });
 });
