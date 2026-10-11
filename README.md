@@ -63,6 +63,7 @@ The coursework shaped the design, and its distributed-systems ideas are still vi
 ### 📁 Files and folders
 
 - Grid and list views, sorting, instant filter-as-you-type search, and category filters (documents, images, media).
+- **Search the folder or everything below it:** filtering is instant for the open folder, and a toggle extends the search to all subfolders (files and folders by name, with where each result lives). The search is kept in the address (`?p=docs&q=report&deep=1`), so it can be bookmarked, shared or reloaded.
 - Breadcrumb navigation with the folder shown in the URL, so back, forward and bookmarks work.
 - Create, rename, move and copy files **and whole folders**; drag items onto a folder to move them.
 - Multi-select with click, Ctrl/⌘+click, Shift+click, select all and invert selection.
@@ -322,6 +323,7 @@ All routes live under `/api`. Interactive documentation is served at `/docs` whe
 | --- | --- | --- |
 | Health | `GET /health` | Service and storage connection status |
 | Objects | `GET /objects` | List a folder (paginated, with folder prefixes) |
+| | `GET /objects/search` | Find files and folders by name in a folder and all its subfolders |
 | | `GET /objects/metadata` | Metadata for one object |
 | | `POST /objects/presign-upload` | Presigned PUT URL for a single-request upload |
 | | `GET /objects/presign-download` | Presigned GET URL for one object |
@@ -411,5 +413,6 @@ Security notes:
 | Items per delete request | 200 |
 | Files that can be moved to the trash | up to 5 GiB (larger files can only be deleted permanently) |
 | Text preview | first 256 KB |
+| Search of the subfolders | stops after 300 matches or 50,000 objects read, and says so |
 
-Not built yet: authentication, search across subfolders, undo for moves, renames and pastes, restoring a single item from a deleted batch, progress for large folder moves, and touch drag-and-drop.
+Not built yet: authentication, undo for moves, renames and pastes, restoring a single item from a deleted batch, progress for large folder moves, and touch drag-and-drop.

@@ -18,6 +18,14 @@ class FolderItem(BaseModel):
     prefix: str
 
 
+class SearchResult(BaseModel):
+    """What a search found: matching folders and files, and whether it stopped early."""
+
+    folders: list[FolderItem]
+    objects: list[ObjectMetadata]
+    truncated: bool = Field(description="There may be more matches than were returned")
+
+
 class TreeFile(BaseModel):
     """One file somewhere under a folder: its full key and size."""
 

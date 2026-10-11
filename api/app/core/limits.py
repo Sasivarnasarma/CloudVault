@@ -17,6 +17,10 @@ MAX_PART_URLS_PER_REQUEST = 100
 MAX_ARCHIVE_FILES = 10_000
 MAX_DOWNLOAD_URLS_PER_REQUEST = 100
 
+# Searching a folder and everything below it: how much is read and how much is returned.
+MAX_SEARCH_SCAN = 50_000
+MAX_SEARCH_RESULTS = 300
+
 # Deleting: how many files and folders one request can move to the trash.
 MAX_TRASH_ITEMS_PER_REQUEST = 200
 

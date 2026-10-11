@@ -6,6 +6,7 @@ from app.schemas.storage import (
     ObjectMetadata,
     PresignedDownloadData,
     PresignedUploadData,
+    SearchResult,
     TreeFile,
     UploadedPartInfo,
 )
@@ -63,6 +64,14 @@ class BaseStorageService(ABC):
         """Every file under a folder, however deep, and the folders that have nothing inside.
 
         Raises PayloadTooLargeError if there are more than `max_files` files.
+        """
+
+    @abstractmethod
+    def search(self, prefix: str, query: str, limit: int, max_scan: int) -> SearchResult:
+        """Files and folders under `prefix`, however deep, whose own name contains `query`.
+
+        The match ignores case. It stops after `limit` matches or after reading `max_scan`
+        objects, and says so in `truncated`.
         """
 
     # --- objects --------------------------------------------------------------------

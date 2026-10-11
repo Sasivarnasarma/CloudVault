@@ -12,6 +12,7 @@ from app.schemas.storage import (
     ObjectMetadata,
     PresignedDownloadData,
     PresignedUploadData,
+    SearchResult,
     TreeFile,
     UploadedPartInfo,
 )
@@ -272,6 +273,49 @@ class S3StorageService(BaseStorageService):
         if previous_marker:
             empty_folders.append(previous_marker)
         return files, empty_folders
+
+    def search(self, prefix: str, query: str, limit: int, max_scan: int) -> SearchResult:
+        norm_prefix = normalize_prefix(prefix)
+        needle = query.strip().lower()
+        folders: dict[str, FolderItem] = {}
+        objects: list[ObjectMetadata] = []
+        scanned = 0
+        truncated = False
+
+        with storage_errors("searching"):
+            paginator = self.client.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=self.bucket, Prefix=norm_prefix):
+                for obj in page.get("Contents", []):
+                    key = obj["Key"]
+                    if key.startswith(TRASH_PREFIX):
+                        continue
+                    scanned += 1
+                    if scanned > max_scan or len(folders) + len(objects) >= limit:
+                        truncated = True
+                        break
+
+                    parts = key[len(norm_prefix) :].split("/")
+                    name = parts.pop()  # empty for a folder marker such as "a/b/"
+                    for depth, folder_name in enumerate(parts):
+                        folder_prefix = norm_prefix + "/".join(parts[: depth + 1]) + "/"
+                        if needle in folder_name.lower() and folder_prefix not in folders:
+                            folders[folder_prefix] = FolderItem(
+                                name=folder_name, prefix=folder_prefix
+                            )
+                    if name and needle in name.lower():
+                        objects.append(
+                            ObjectMetadata(
+                                key=key,
+                                name=name,
+                                size=obj.get("Size", 0),
+                                content_type=guess_content_type(key),
+                                last_modified=obj["LastModified"],
+                                etag=obj.get("ETag", "").strip('"'),
+                            )
+                        )
+                if truncated:
+                    break
+        return SearchResult(folders=list(folders.values()), objects=objects, truncated=truncated)
 
     # --- objects --------------------------------------------------------------------
 

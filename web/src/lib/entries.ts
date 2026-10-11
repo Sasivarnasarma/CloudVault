@@ -1,8 +1,13 @@
 import type { FileObject, FolderObject } from '../types';
 
+interface EntryBase {
+  /** Where it is, relative to the folder being viewed. Only set for results from subfolders. */
+  where?: string;
+}
+
 export type Entry =
-  | { type: 'folder'; id: string; name: string; folder: FolderObject }
-  | { type: 'file'; id: string; name: string; file: FileObject };
+  | ({ type: 'folder'; id: string; name: string; folder: FolderObject } & EntryBase)
+  | ({ type: 'file'; id: string; name: string; file: FileObject } & EntryBase);
 
 export type TransferMode = 'rename' | 'move' | 'copy';
 

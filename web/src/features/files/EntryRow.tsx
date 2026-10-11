@@ -55,6 +55,11 @@ export function EntryRow({ entry, index, selected, selection, handlers: h, drag,
             <span className="truncate font-medium text-ink" title={entry.name}>
               {entry.name}
             </span>
+            {entry.where && (
+              <span className="hidden truncate text-xs text-ink-3 sm:inline" title={entry.where}>
+                in {entry.where}
+              </span>
+            )}
           </button>
         </td>
         <td

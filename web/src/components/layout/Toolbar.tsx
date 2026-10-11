@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { ArrowDownUp, ArrowUp, Check, LayoutGrid, List, Menu, RefreshCw, Search, X } from 'lucide-react';
+import { ArrowDownUp, ArrowUp, Check, FolderTree, LayoutGrid, List, Menu, RefreshCw, Search, X } from 'lucide-react';
 import type { RefObject } from 'react';
 import { useDropTarget } from '../../hooks/useDropTarget';
 import { cn } from '../../lib/cn';
@@ -14,6 +14,9 @@ interface ToolbarProps {
   currentPrefix: string;
   rootLabel: string;
   search: string;
+  /** The search also looks in the subfolders. */
+  deepSearch: boolean;
+  onDeepSearchChange: (deep: boolean) => void;
   searchRef: RefObject<HTMLInputElement | null>;
   view: ViewMode;
   sort: { key: SortKey; dir: SortDir };
@@ -65,7 +68,9 @@ function UpButton({
 
 export function Toolbar({
   currentPrefix,
+  deepSearch,
   dragActive,
+  onDeepSearchChange,
   onDropToPrefix,
   onNavigate,
   onNavigateUp,
@@ -113,7 +118,7 @@ export function Toolbar({
             type="search"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search this folder"
+            placeholder={deepSearch ? 'Search this folder and its subfolders' : 'Search this folder'}
             aria-label="Search this folder"
             className="h-9 w-full rounded-lg border border-line bg-surface pl-9 pr-16 text-sm text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 [&::-webkit-search-cancel-button]:hidden"
           />
@@ -135,6 +140,15 @@ export function Toolbar({
             </Kbd>
           )}
         </div>
+
+        <IconButton
+          label="Include subfolders in the search"
+          aria-pressed={deepSearch}
+          onClick={() => onDeepSearchChange(!deepSearch)}
+          className={cn('border', deepSearch ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-surface')}
+        >
+          <FolderTree className="size-4" />
+        </IconButton>
 
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>

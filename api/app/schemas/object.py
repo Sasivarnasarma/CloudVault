@@ -23,6 +23,14 @@ class ObjectListResponse(BaseModel):
     has_more: bool = False
 
 
+class ObjectSearchResponse(BaseModel):
+    query: str
+    prefix: str = Field(description="The folder that was searched, with everything below it")
+    folders: list[FolderItem]
+    objects: list[ObjectMetadata]
+    truncated: bool = Field(description="There may be more matches than were returned")
+
+
 class PresignUploadRequest(BaseModel):
     key: str = Field(description="Target object key path, e.g. documents/report.pdf")
     content_type: str = Field(

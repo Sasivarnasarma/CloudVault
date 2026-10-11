@@ -11,6 +11,7 @@ from app.schemas.storage import (
     ObjectMetadata,
     PresignedDownloadData,
     PresignedUploadData,
+    SearchResult,
     TreeFile,
     UploadedPartInfo,
 )
@@ -174,6 +175,25 @@ class FakeStorage(BaseStorageService):
         return [TreeFile(key=prefix + "a.txt", size=3), TreeFile(key=prefix + "x/b.txt", size=4)], [
             prefix + "empty/"
         ]
+
+    def search(self, prefix, query, limit, max_scan):
+        self.calls.append(("search", f"{prefix}|{query}|{limit}|{max_scan}"))
+        if self.fail_with:
+            raise self.fail_with
+        return SearchResult(
+            folders=[FolderItem(name="reports", prefix=prefix + "reports/")],
+            objects=[
+                ObjectMetadata(
+                    key=prefix + "a/report.txt",
+                    name="report.txt",
+                    size=3,
+                    content_type="text/plain",
+                    last_modified="2026-01-01T00:00:00Z",
+                    etag="e",
+                )
+            ],
+            truncated=True,
+        )
 
     def generate_upload_url(self, key, content_type, expires_in=900, allow_overwrite=False):
         self.calls.append(("presign_upload", f"{key}:{allow_overwrite}"))
@@ -600,6 +620,36 @@ class TestMultipartRoutes:
         assert (
             client.post("/api/uploads/multipart/abort", json={"key": "big.bin"}).status_code == 422
         )
+
+
+class TestSearch:
+    def test_searches_a_folder_and_everything_below_it(self, client, storage):
+        res = client.get("/api/objects/search", params={"q": " Report ", "prefix": "/docs//"})
+        assert res.status_code == 200
+        body = res.json()
+        assert body["query"] == "Report"
+        assert body["prefix"] == "docs/"
+        assert [f["prefix"] for f in body["folders"]] == ["docs/reports/"]
+        assert [o["key"] for o in body["objects"]] == ["docs/a/report.txt"]
+        assert body["truncated"] is True
+        assert ("search", "docs/|Report|300|50000") in storage.calls
+
+    def test_searches_the_whole_bucket_without_a_prefix(self, client, storage):
+        assert client.get("/api/objects/search", params={"q": "x"}).status_code == 200
+        assert ("search", "|x|300|50000") in storage.calls
+
+    def test_needs_something_to_search_for(self, client):
+        assert client.get("/api/objects/search").status_code == 422
+        assert client.get("/api/objects/search", params={"q": ""}).status_code == 422
+        assert client.get("/api/objects/search", params={"q": "   "}).status_code == 400
+
+    def test_refuses_the_trash_folder(self, client):
+        res = client.get("/api/objects/search", params={"q": "x", "prefix": ".cloudvault-trash/"})
+        assert res.status_code == 400
+
+    def test_reports_storage_failures(self, client, storage):
+        storage.fail_with = StorageUnavailableError()
+        assert client.get("/api/objects/search", params={"q": "x"}).status_code == 503
 
 
 class TestFolderTree:

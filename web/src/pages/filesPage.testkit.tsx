@@ -16,6 +16,7 @@ vi.mock('../services/objectService', () => ({
   requestPresignedDownload: vi.fn(),
   requestPresignedDownloads: vi.fn(),
   requestPresignedUpload: vi.fn(),
+  searchObjects: vi.fn(),
 }));
 vi.mock('../services/folderService', () => ({
   createFolder: vi.fn(),
@@ -49,6 +50,7 @@ import {
   requestPresignedDownload,
   requestPresignedDownloads,
   requestPresignedUpload,
+  searchObjects,
 } from '../services/objectService';
 import { deleteFromTrash, emptyTrash, listTrash, moveToTrash, restoreFromTrash } from '../services/trashService';
 import { triggerBrowserDownload, uploadFileDirect } from '../services/transferService';
@@ -134,6 +136,9 @@ export function installPageMocks() {
       method: 'PUT',
       expires_in: 900,
     }));
+  vi.mocked(searchObjects)
+    .mockReset()
+    .mockResolvedValue({ query: '', prefix: '', folders: [], objects: [], truncated: false });
   vi.mocked(uploadFileDirect).mockReset().mockResolvedValue(undefined);
   vi.mocked(triggerBrowserDownload).mockReset();
 }

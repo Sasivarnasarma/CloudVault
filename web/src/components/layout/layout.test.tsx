@@ -90,6 +90,7 @@ function renderToolbar(overrides: Partial<React.ComponentProps<typeof Toolbar>> 
     onNavigate: vi.fn(),
     onNavigateUp: vi.fn(),
     onSearchChange: vi.fn(),
+    onDeepSearchChange: vi.fn(),
     onViewChange: vi.fn(),
     onSortChange: vi.fn(),
     onRefresh: vi.fn(),
@@ -100,6 +101,7 @@ function renderToolbar(overrides: Partial<React.ComponentProps<typeof Toolbar>> 
       currentPrefix="docs/"
       rootLabel="All files"
       search=""
+      deepSearch={false}
       searchRef={createRef<HTMLInputElement>()}
       view="grid"
       sort={{ key: 'name', dir: 'asc' }}
@@ -188,6 +190,8 @@ describe('Toolbar drop targets', () => {
         currentPrefix={currentPrefix}
         rootLabel="All files"
         search=""
+        deepSearch={false}
+        onDeepSearchChange={vi.fn()}
         searchRef={createRef<HTMLInputElement>()}
         view="grid"
         sort={{ key: 'name', dir: 'asc' }}
@@ -222,5 +226,51 @@ describe('Toolbar drop targets', () => {
     const atRoot = setup('', true);
     fireEvent.drop(screen.getByRole('button', { name: 'Up one folder' }), { dataTransfer: entryDragData() });
     expect(atRoot).not.toHaveBeenCalled();
+  });
+});
+
+describe('Toolbar subfolder search', () => {
+  const render1 = (deepSearch: boolean, onDeepSearchChange = vi.fn()) => {
+    render(
+      <Toolbar
+        currentPrefix="docs/"
+        rootLabel="All files"
+        search=""
+        deepSearch={deepSearch}
+        onDeepSearchChange={onDeepSearchChange}
+        searchRef={createRef<HTMLInputElement>()}
+        view="grid"
+        sort={{ key: 'name', dir: 'asc' }}
+        refreshing={false}
+        onNavigate={vi.fn()}
+        onNavigateUp={vi.fn()}
+        onSearchChange={vi.fn()}
+        onViewChange={vi.fn()}
+        onSortChange={vi.fn()}
+        onRefresh={vi.fn()}
+        onOpenNav={vi.fn()}
+      />,
+    );
+    return onDeepSearchChange;
+  };
+
+  it('has a toggle that includes the subfolders in the search', async () => {
+    const onChange = render1(false);
+    const toggle = screen.getByRole('button', { name: 'Include subfolders in the search' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(toggle);
+    expect(onChange).toHaveBeenCalledWith(true);
+  });
+
+  it('says in the search box when the subfolders are included', () => {
+    render1(true);
+    expect(screen.getByRole('searchbox', { name: 'Search this folder' })).toHaveAttribute(
+      'placeholder',
+      'Search this folder and its subfolders',
+    );
+    expect(screen.getByRole('button', { name: 'Include subfolders in the search' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
 });

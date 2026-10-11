@@ -2,6 +2,7 @@ import type {
   DeleteObjectResponse,
   FileObject,
   ObjectListResponse,
+  ObjectSearchResponse,
   PresignDownloadResponse,
   PresignDownloadsResponse,
   PresignUploadResponse,
@@ -23,6 +24,13 @@ export function listObjects(prefix = '', { limit, cursor }: ListOptions = {}): P
   if (cursor) params.push(`cursor=${encodeURIComponent(cursor)}`);
   const query = params.length > 0 ? `?${params.join('&')}` : '';
   return request(`/api/objects${query}`, undefined, 'Failed to fetch objects');
+}
+
+/** Find files and folders by name in a folder and everything below it. */
+export function searchObjects(query: string, prefix = '', signal?: AbortSignal): Promise<ObjectSearchResponse> {
+  const params = new URLSearchParams({ q: query });
+  if (prefix) params.set('prefix', prefix);
+  return request(`/api/objects/search?${params}`, { signal }, 'Search failed');
 }
 
 export function getObjectMetadata(key: string): Promise<FileObject> {

@@ -53,6 +53,11 @@ export function EntryTile({ entry, index, selected, selection, handlers: h, drag
           <span className="mt-0.5 text-xs text-ink-3">
             {entry.type === 'folder' ? 'Folder' : `${formatBytes(entry.file.size, 1)} · ${kindLabel(entry.file)}`}
           </span>
+          {entry.where && (
+            <span className="mt-0.5 w-full truncate text-xs text-ink-3" title={entry.where}>
+              in {entry.where}
+            </span>
+          )}
         </button>
         <div
           className={cn(

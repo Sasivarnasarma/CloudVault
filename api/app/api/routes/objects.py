@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, Query
 
 from app.api.checks import check_upload_size
+from app.core.limits import MAX_SEARCH_RESULTS, MAX_SEARCH_SCAN
 from app.schemas.object import (
     DeleteObjectResponse,
     ObjectListResponse,
+    ObjectSearchResponse,
     PresignDownloadResponse,
     PresignDownloadsRequest,
     PresignDownloadsResponse,
@@ -14,6 +16,7 @@ from app.schemas.object import (
 )
 from app.schemas.storage import ObjectMetadata
 from app.services.storage.base import BaseStorageService
+from app.services.storage.exceptions import InvalidKeyError
 from app.services.storage.factory import get_storage_service
 from app.services.storage.keys import normalize_key, normalize_prefix
 
@@ -55,6 +58,27 @@ def list_objects(
         total_size=sum(obj.size for obj in objects),
         next_cursor=next_cursor,
         has_more=next_cursor is not None,
+    )
+
+
+@router.get("/search", response_model=ObjectSearchResponse)
+def search_objects(
+    q: str = Query(..., min_length=1, max_length=255, description="Part of a file or folder name"),
+    prefix: str = Query(default="", description="Folder to search, with everything below it"),
+    storage: BaseStorageService = Depends(get_storage_service),
+):
+    """Find files and folders by name in a folder and all of its subfolders."""
+    clean_prefix = normalize_prefix(prefix)
+    query = q.strip()
+    if not query:
+        raise InvalidKeyError("Enter something to search for")
+    result = storage.search(clean_prefix, query, MAX_SEARCH_RESULTS, MAX_SEARCH_SCAN)
+    return ObjectSearchResponse(
+        query=query,
+        prefix=clean_prefix,
+        folders=result.folders,
+        objects=result.objects,
+        truncated=result.truncated,
     )
 
 

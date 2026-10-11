@@ -32,6 +32,16 @@ export interface ObjectListResponse {
   has_more?: boolean;
 }
 
+export interface ObjectSearchResponse {
+  query: string;
+  /** The folder that was searched, with everything below it. */
+  prefix: string;
+  folders: FolderObject[];
+  objects: FileObject[];
+  /** There may be more matches than were returned. */
+  truncated: boolean;
+}
+
 export interface PresignUploadResponse {
   upload_url: string;
   method: string;

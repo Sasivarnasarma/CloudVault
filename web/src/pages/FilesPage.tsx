@@ -16,6 +16,7 @@ import { InspectorPanel } from '../features/files/InspectorPanel';
 import { ListingState } from '../features/files/ListingState';
 import { LoadMore } from '../features/files/LoadMore';
 import { PreviewDialog } from '../features/preview/PreviewDialog';
+import { SearchNotice } from '../features/files/SearchNotice';
 import { ShortcutsDialog } from '../features/files/ShortcutsDialog';
 import { StatusBar } from '../features/files/StatusBar';
 import { TransferDialog } from '../features/files/TransferDialog';
@@ -226,6 +227,8 @@ export function FilesPage() {
             currentPrefix={currentPrefix}
             rootLabel={ROOT_LABEL}
             search={view.search}
+            deepSearch={view.deep}
+            onDeepSearchChange={view.setDeep}
             searchRef={searchRef}
             view={view.view}
             sort={view.sort}
@@ -253,9 +256,10 @@ export function FilesPage() {
           <div className="relative flex min-h-0 flex-1">
             <EntryContextMenu items={pageMenu}>
               <main className="min-w-0 flex-1 overflow-y-auto" aria-busy={listing.loading}>
+                <SearchNotice search={view.deepSearch} />
                 <ListingState
                   error={listing.error}
-                  loading={listing.loading}
+                  loading={listing.loading || view.deepSearch.searching}
                   empty={view.entries.length === 0}
                   filtered={view.filtered}
                   view={view.view}
