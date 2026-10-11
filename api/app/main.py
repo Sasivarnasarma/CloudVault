@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +8,7 @@ from fastapi.responses import JSONResponse
 from app.api.router import api_router
 from app.core.config import settings
 from app.services.storage.exceptions import StorageError
+from app.web import mount_web_app
 
 logging.basicConfig(
     level=settings.LOG_LEVEL.upper(),
@@ -37,10 +39,12 @@ async def storage_error_handler(_: Request, exc: StorageError) -> JSONResponse:
 app.include_router(api_router)
 
 
-@app.get("/")
-async def root():
-    return {
-        "message": f"Welcome to {settings.APP_NAME}",
-        "docs": "/docs",
-        "health": "/api/health",
-    }
+if not (settings.WEB_DIST and mount_web_app(app, Path(settings.WEB_DIST))):
+    # Without a built web app (development, where Vite serves it) the root says where things are.
+    @app.get("/")
+    async def root():
+        return {
+            "message": f"Welcome to {settings.APP_NAME}",
+            "docs": "/docs",
+            "health": "/api/health",
+        }

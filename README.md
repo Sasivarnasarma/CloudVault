@@ -25,6 +25,9 @@ Browse, upload, preview and organize files in AWS S3, Cloudflare R2, MinIO or an
 - [Features](#features)
 - [How it works](#how-it-works)
 - [Quick start](#quick-start)
+- [Run with Docker](#run-with-docker)
+- [Docker Compose](#docker-compose)
+- [Continuous integration](#continuous-integration)
 - [Configuration](#configuration)
 - [Bucket setup](#bucket-setup)
 - [Using CloudVault](#using-cloudvault)
@@ -125,10 +128,10 @@ flowchart LR
     B == "data plane: presigned URLs<br/>(uploads, downloads, previews, zip)" ==> S
 ```
 
-| Plane | Path | Carries |
-| --- | --- | --- |
-| **Control** | Browser → FastAPI → storage | Listings, folder operations, copy/move, trash, and *requests for* presigned URLs |
-| **Data** | Browser → storage | The actual bytes of uploads, downloads, previews and zip contents |
+| Plane       | Path                        | Carries                                                                          |
+| ----------- | --------------------------- | -------------------------------------------------------------------------------- |
+| **Control** | Browser → FastAPI → storage | Listings, folder operations, copy/move, trash, and _requests for_ presigned URLs |
+| **Data**    | Browser → storage           | The actual bytes of uploads, downloads, previews and zip contents                |
 
 Design decisions worth knowing:
 
@@ -142,51 +145,117 @@ Design decisions worth knowing:
 
 ### Requirements
 
-- Node.js 20+ and [pnpm](https://pnpm.io)
+- [Node.js](https://nodejs.org) 22+ and [pnpm](https://pnpm.io)
 - Python 3.11+ and [uv](https://docs.astral.sh/uv/)
 - An S3-compatible bucket (for local development, [MinIO](https://min.io) is easiest)
 
-### 1. Backend
+### From source
 
 ```bash
-cd api
-cp .env.example .env     # then fill in your storage settings
-uv sync
-uv run fastapi dev
+pnpm bootstrap                   # install the web and API dependencies
+cp api/.env.example api/.env     # then fill in your storage settings
+pnpm dev                         # API on :8000, web app on :5173, both reloading as you edit
 ```
 
-The API serves on `http://127.0.0.1:8000`, with interactive docs at `/docs`.
+Open **http://localhost:5173**. The dev server proxies `/api` to the API, whose interactive docs are at http://localhost:8000/docs.
 
-### 2. Frontend
+### Without Docker
+
+To run the finished app on a machine of your own, build it once and start it:
 
 ```bash
-cd web
-pnpm install
-pnpm dev
+pnpm bootstrap                   # install the web and API dependencies
+pnpm build                       # build the web app
+pnpm start                       # serve the app and the API → http://localhost:8000
 ```
 
-Open `http://localhost:5173`. The dev server proxies `/api` to the backend.
+One process serves everything on one port, like the Docker image. It listens on `127.0.0.1` (this machine only) because there is no sign-in: set `HOST=0.0.0.0` and `PORT` in `api/.env` to change that, and see [Deployment notes](#deployment-notes) first.
 
-### 3. Allow the browser to reach your bucket
+### Allow the browser to reach your bucket
 
 Uploads, previews and zip downloads go straight from the browser to storage, so the bucket needs a CORS rule. See [Bucket setup](#bucket-setup).
+
+### Commands
+
+Run from the repository root:
+
+| Command          | What it does                                                           |
+| ---------------- | ---------------------------------------------------------------------- |
+| `pnpm bootstrap` | Install the web and API dependencies                                   |
+| `pnpm dev`       | Run the API (`:8000`) and web app (`:5173`), both reloading on changes |
+| `pnpm build`     | Production build of the web app (`web/dist`)                           |
+| `pnpm start`     | Serve the built web app and the API on `:8000`, without Docker         |
+| `pnpm test`      | Web tests (Vitest), then API tests (pytest)                            |
+| `pnpm format`    | Format the web app and docs (Prettier) and the API (Ruff)              |
+| `pnpm lint`      | Check formatting and lint rules without changing anything              |
+| `pnpm typecheck` | TypeScript across the web app                                          |
+| `pnpm check`     | Everything CI runs: lint, typecheck and all tests                      |
+
+## Run with Docker
+
+One image holds the API and the built web app, so there is a single process and a single port.
+
+```bash
+docker build -t cloudvault .
+docker run -p 8000:8000 --env-file api/.env cloudvault     # then open http://localhost:8000
+```
+
+The storage settings come from the environment (see [Configuration](#configuration)); nothing secret is built into the image, and `.env` files are kept out of it. A few things to know:
+
+- **Two addresses for the storage.** The app talks to the storage at `S3_ENDPOINT`, but files go straight between your browser and the storage through presigned links, which must name an address **your browser** can reach. When both are the same (R2, AWS S3, a public MinIO) set only `S3_ENDPOINT`. When they differ, set `S3_PUBLIC_ENDPOINT` to the browser's address. Inside the container `localhost` is the container itself, so for a MinIO on the host use `S3_ENDPOINT=http://host.docker.internal:9000` (on Linux add `--add-host=host.docker.internal:host-gateway`) and `S3_PUBLIC_ENDPOINT=http://localhost:9000`.
+- **CORS.** The web app and the API share one origin, so `CORS_ORIGINS` is not needed. The bucket still needs its own CORS rule (see [Bucket setup](#bucket-setup)).
+- **Safety.** The server runs as a non-root user and the image has a health check. There is no authentication, so keep the port off the public internet.
+
+## Docker Compose
+
+`compose.yaml` runs CloudVault **with its own storage**, so nothing else is needed:
+
+```bash
+docker compose up --build        # then open http://localhost:8000
+```
+
+It starts the app, a [MinIO](https://min.io) storage (its console is on http://localhost:9001) and creates the bucket. Files are kept in the `minio-data` volume, so they survive `docker compose down` (add `-v` to delete them too). The default login is `cloudvault` / `cloudvault-secret`, which is fine on your own machine; change it in a `.env` file (see `.env.example`) before using this anywhere else.
+
+To use a storage you already have instead, put its settings in `.env` and start only the app:
+
+```bash
+docker compose up --build --no-deps cloudvault
+```
+
+The `.env.example` next to `compose.yaml` shows the variables. For R2 or AWS S3 only `S3_ENDPOINT` (and the keys and bucket) is needed.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main`, every version tag and every pull request:
+
+| Job              | What it checks                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **API**          | Ruff format and lint, pytest, and a vulnerability audit of the runtime dependencies                                                                                                                                                                                                                                                                                             |
+| **Web**          | Prettier, oxlint, TypeScript, Vitest, the production build (uploaded as the `web-dist` artifact) and a vulnerability audit of the production dependencies                                                                                                                                                                                                                       |
+| **Docker image** | Builds the image, then **starts it next to a MinIO storage** and runs a real round trip: health, the web app and its routes, upload and download through presigned links, search, trash and restore, and a non-root check. Only if that passes is the image published to `ghcr.io/<owner>/cloudvault` (`latest` from `main`, plus version and commit tags; `amd64` and `arm64`) |
+| **Report**       | A summary of every gate and the test counts, also posted as a single comment that is updated on each pull request                                                                                                                                                                                                                                                               |
+
+Every gate runs even when an earlier one fails, so the report always shows all of them. Dependabot opens grouped updates for the web and API dependencies, the actions and the base images. To run the same checks locally, use `pnpm check` (see [Development](#development)).
 
 ## Configuration
 
 Backend settings live in `api/.env` (a template is in `api/.env.example`). Never commit the real file.
 
-| Variable | Description |
-| --- | --- |
-| `STORAGE_PROVIDER` | `minio`, `s3` or `r2` |
-| `S3_ENDPOINT` | Endpoint URL (omit for AWS S3) |
-| `S3_REGION` | Region (`auto` for R2) |
-| `S3_BUCKET` | Bucket name |
-| `S3_ACCESS_KEY` | Access key (required) |
-| `S3_SECRET_KEY` | Secret key (required) |
-| `S3_ADDRESSING_STYLE` | `path` or `virtual` |
-| `MAX_UPLOAD_BYTES` | Optional upload size limit (default 5 GiB) |
-| `CORS_ORIGINS` | JSON list of allowed frontend origins, e.g. `["http://localhost:5173"]` |
-| `LOG_LEVEL` | Logging level (default `INFO`) |
+| Variable              | Description                                                                                                                                                       |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `STORAGE_PROVIDER`    | `minio`, `s3` or `r2`                                                                                                                                             |
+| `S3_ENDPOINT`         | Endpoint URL (omit for AWS S3)                                                                                                                                    |
+| `S3_REGION`           | Region (`auto` for R2)                                                                                                                                            |
+| `S3_BUCKET`           | Bucket name                                                                                                                                                       |
+| `S3_ACCESS_KEY`       | Access key (required)                                                                                                                                             |
+| `S3_SECRET_KEY`       | Secret key (required)                                                                                                                                             |
+| `S3_ADDRESSING_STYLE` | `path` or `virtual`                                                                                                                                               |
+| `S3_PUBLIC_ENDPOINT`  | Optional. The address the browser uses to reach the storage when it differs from `S3_ENDPOINT` (for example in Docker). Presigned links are made for this address |
+| `MAX_UPLOAD_BYTES`    | Optional upload size limit in bytes (default 5 TiB, S3's own maximum)                                                                                             |
+| `CORS_ORIGINS`        | JSON list of allowed frontend origins, e.g. `["http://localhost:5173"]`                                                                                           |
+| `LOG_LEVEL`           | Logging level (default `INFO`)                                                                                                                                    |
+| `HOST` · `PORT`       | Where `pnpm dev` and `pnpm start` listen (default `127.0.0.1` and `8000`). The Docker image always listens on `0.0.0.0:8000` inside the container                 |
+| `WEB_DIST`            | Folder of the built web app for the API to serve. Set in the Docker image; `pnpm start` finds `web/dist` by itself                                                |
 
 ### Provider examples
 
@@ -259,10 +328,10 @@ Replace the origin with your real frontend origin in production.
 
 Nothing leaves the trash on its own, and an interrupted multipart upload leaves its parts behind (the bucket keeps and bills them until they are aborted). Add two rules:
 
-| Rule | Prefix | Action |
-| --- | --- | --- |
-| Empty the trash automatically | `.cloudvault-trash/` | Expire objects after, for example, 30 days |
-| Clean up abandoned uploads | whole bucket | Abort incomplete multipart uploads after a few days |
+| Rule                          | Prefix               | Action                                              |
+| ----------------------------- | -------------------- | --------------------------------------------------- |
+| Empty the trash automatically | `.cloudvault-trash/` | Expire objects after, for example, 30 days          |
+| Clean up abandoned uploads    | whole bucket         | Abort incomplete multipart uploads after a few days |
 
 ## Using CloudVault
 
@@ -291,95 +360,94 @@ Folders and multi-selections download as a single zip. The API lists the files a
 
 Shortcuts work like a desktop file manager and switch off while you type in a field. On a Mac, <kbd>Ctrl</kbd> is <kbd>⌘</kbd>. Press <kbd>?</kbd> in the app for this list.
 
-| Group | Action | Keys |
-| --- | --- | --- |
-| **Move around** | Move between items | <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> |
-| | First / last item | <kbd>Home</kbd> / <kbd>End</kbd> |
-| | Up / down a page | <kbd>PgUp</kbd> / <kbd>PgDn</kbd> |
-| | Jump to a name | type its first letters |
-| | Open folder / preview file | <kbd>Enter</kbd> |
-| | Up one folder | <kbd>Backspace</kbd> or <kbd>Alt</kbd>+<kbd>↑</kbd> |
-| | Search this folder | <kbd>/</kbd> or <kbd>Ctrl</kbd>+<kbd>E</kbd> |
-| **Select** | Select the item | <kbd>Space</kbd> |
-| | Add or remove the item | <kbd>Ctrl</kbd>+<kbd>Space</kbd> |
-| | Extend the selection | <kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> |
-| | Move without selecting | <kbd>Ctrl</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> |
-| | Select all / invert | <kbd>Ctrl</kbd>+<kbd>A</kbd> / <kbd>Ctrl</kbd>+<kbd>I</kbd> |
-| | Clear selection | <kbd>Esc</kbd> |
-| **Work with items** | Rename | <kbd>F2</kbd> |
-| | Download (folders and selections as a zip) | <kbd>Ctrl</kbd>+<kbd>D</kbd> |
-| | Copy / cut / paste here | <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd> |
-| | Move to trash | <kbd>Delete</kbd> |
-| | Delete forever | <kbd>Shift</kbd>+<kbd>Delete</kbd> |
-| | Undo the last change (delete, move, rename or paste) | <kbd>Ctrl</kbd>+<kbd>Z</kbd> |
-| | Open the item's menu | <kbd>Shift</kbd>+<kbd>F10</kbd> or <kbd>Menu</kbd> |
-| **Upload and view** | New folder | <kbd>Alt</kbd>+<kbd>N</kbd> |
-| | Upload files / a folder | <kbd>Ctrl</kbd>+<kbd>U</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> |
-| | Refresh | <kbd>F5</kbd> or <kbd>Ctrl</kbd>+<kbd>R</kbd> |
-| | Show keyboard shortcuts | <kbd>?</kbd> |
+| Group               | Action                                               | Keys                                                                         |
+| ------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **Move around**     | Move between items                                   | <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd>                          |
+|                     | First / last item                                    | <kbd>Home</kbd> / <kbd>End</kbd>                                             |
+|                     | Up / down a page                                     | <kbd>PgUp</kbd> / <kbd>PgDn</kbd>                                            |
+|                     | Jump to a name                                       | type its first letters                                                       |
+|                     | Open folder / preview file                           | <kbd>Enter</kbd>                                                             |
+|                     | Up one folder                                        | <kbd>Backspace</kbd> or <kbd>Alt</kbd>+<kbd>↑</kbd>                          |
+|                     | Search this folder                                   | <kbd>/</kbd> or <kbd>Ctrl</kbd>+<kbd>E</kbd>                                 |
+| **Select**          | Select the item                                      | <kbd>Space</kbd>                                                             |
+|                     | Add or remove the item                               | <kbd>Ctrl</kbd>+<kbd>Space</kbd>                                             |
+|                     | Extend the selection                                 | <kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd>                                 |
+|                     | Move without selecting                               | <kbd>Ctrl</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd>                                  |
+|                     | Select all / invert                                  | <kbd>Ctrl</kbd>+<kbd>A</kbd> / <kbd>Ctrl</kbd>+<kbd>I</kbd>                  |
+|                     | Clear selection                                      | <kbd>Esc</kbd>                                                               |
+| **Work with items** | Rename                                               | <kbd>F2</kbd>                                                                |
+|                     | Download (folders and selections as a zip)           | <kbd>Ctrl</kbd>+<kbd>D</kbd>                                                 |
+|                     | Copy / cut / paste here                              | <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd>                   |
+|                     | Move to trash                                        | <kbd>Delete</kbd>                                                            |
+|                     | Delete forever                                       | <kbd>Shift</kbd>+<kbd>Delete</kbd>                                           |
+|                     | Undo the last change (delete, move, rename or paste) | <kbd>Ctrl</kbd>+<kbd>Z</kbd>                                                 |
+|                     | Open the item's menu                                 | <kbd>Shift</kbd>+<kbd>F10</kbd> or <kbd>Menu</kbd>                           |
+| **Upload and view** | New folder                                           | <kbd>Alt</kbd>+<kbd>N</kbd>                                                  |
+|                     | Upload files / a folder                              | <kbd>Ctrl</kbd>+<kbd>U</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> |
+|                     | Refresh                                              | <kbd>F5</kbd> or <kbd>Ctrl</kbd>+<kbd>R</kbd>                                |
+|                     | Show keyboard shortcuts                              | <kbd>?</kbd>                                                                 |
 
 ## API overview
 
 All routes live under `/api`. Interactive documentation is served at `/docs` when the API is running.
 
-| Area | Endpoint | Purpose |
-| --- | --- | --- |
-| Health | `GET /health` | Service and storage connection status |
-| Objects | `GET /objects` | List a folder (paginated, with folder prefixes) |
-| | `GET /objects/search` | Find files and folders by name in a folder and all its subfolders |
-| | `GET /objects/metadata` | Metadata for one object |
-| | `POST /objects/presign-upload` | Presigned PUT URL for a single-request upload |
-| | `GET /objects/presign-download` | Presigned GET URL for one object |
-| | `POST /objects/presign-downloads` | Presigned GET URLs for up to 100 objects |
-| | `POST /objects/copy` · `POST /objects/move` | Copy or move one object |
-| | `DELETE /objects` | Permanently delete one object |
-| Folders | `POST /folders` · `DELETE /folders` | Create a folder, or delete one with its contents |
-| | `POST /folders/copy` · `POST /folders/move` | Copy or move a folder tree. Send `Accept: application/x-ndjson` to stream progress as JSON lines; closing the connection stops and undoes it |
-| | `GET /folders/tree` | Every file under a prefix (used for zips) |
-| Multipart | `POST /uploads/multipart` | Start an upload; the server picks the part size |
-| | `POST /uploads/multipart/parts` | Presigned URLs for specific parts |
-| | `GET /uploads/multipart/parts` | Parts already stored (for resuming) |
-| | `POST /uploads/multipart/complete` · `/abort` | Assemble or discard an upload |
-| Trash | `POST /trash` · `GET /trash` | Move items to the trash, list the trash |
-| | `POST /trash/{id}/restore` | Restore a batch, or only the items named in the body (`{"paths": [...]}`) |
-| | `DELETE /trash/{id}` · `DELETE /trash` | Delete one batch (or only some of its items, `?paths=...`), or empty the trash |
+| Area      | Endpoint                                      | Purpose                                                                                                                                      |
+| --------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Health    | `GET /health`                                 | Service and storage connection status                                                                                                        |
+| Objects   | `GET /objects`                                | List a folder (paginated, with folder prefixes)                                                                                              |
+|           | `GET /objects/search`                         | Find files and folders by name in a folder and all its subfolders                                                                            |
+|           | `GET /objects/metadata`                       | Metadata for one object                                                                                                                      |
+|           | `POST /objects/presign-upload`                | Presigned PUT URL for a single-request upload                                                                                                |
+|           | `GET /objects/presign-download`               | Presigned GET URL for one object                                                                                                             |
+|           | `POST /objects/presign-downloads`             | Presigned GET URLs for up to 100 objects                                                                                                     |
+|           | `POST /objects/copy` · `POST /objects/move`   | Copy or move one object                                                                                                                      |
+|           | `DELETE /objects`                             | Permanently delete one object                                                                                                                |
+| Folders   | `POST /folders` · `DELETE /folders`           | Create a folder, or delete one with its contents                                                                                             |
+|           | `POST /folders/copy` · `POST /folders/move`   | Copy or move a folder tree. Send `Accept: application/x-ndjson` to stream progress as JSON lines; closing the connection stops and undoes it |
+|           | `GET /folders/tree`                           | Every file under a prefix (used for zips)                                                                                                    |
+| Multipart | `POST /uploads/multipart`                     | Start an upload; the server picks the part size                                                                                              |
+|           | `POST /uploads/multipart/parts`               | Presigned URLs for specific parts                                                                                                            |
+|           | `GET /uploads/multipart/parts`                | Parts already stored (for resuming)                                                                                                          |
+|           | `POST /uploads/multipart/complete` · `/abort` | Assemble or discard an upload                                                                                                                |
+| Trash     | `POST /trash` · `GET /trash`                  | Move items to the trash, list the trash                                                                                                      |
+|           | `POST /trash/{id}/restore`                    | Restore a batch, or only the items named in the body (`{"paths": [...]}`)                                                                    |
+|           | `DELETE /trash/{id}` · `DELETE /trash`        | Delete one batch (or only some of its items, `?paths=...`), or empty the trash                                                               |
 
 Errors are returned as predictable JSON with a user-safe message. Storage credentials, stack traces and provider internals are never included in responses.
 
 ## Development
 
-### Tests
+Everything is run from the repository root (see [Commands](#commands)).
 
 ```bash
-cd api && uv run pytest     # backend (storage service, validation, trash, multipart, API)
-cd web && pnpm test         # frontend (Vitest + Testing Library)
+pnpm check      # lint, typecheck and all tests: what CI runs
+pnpm format     # fix formatting: Prettier (web, docs, config) and Ruff (API, including imports)
+pnpm test       # web tests (Vitest + Testing Library), then API tests (pytest)
+pnpm build      # type-checks, then writes web/dist
 ```
 
-### Code style
+| Part   | Format   | Lint   | Types      | Tests                                |
+| ------ | -------- | ------ | ---------- | ------------------------------------ |
+| `api/` | Ruff     | Ruff   | –          | pytest, in `api/tests/`              |
+| `web/` | Prettier | oxlint | TypeScript | Vitest, as `web/src/**/*.test.ts(x)` |
+| Docs   | Prettier | –      | –          | –                                    |
 
-Both projects are formatted and linted with tools that run the same way for everyone: [Ruff](https://docs.astral.sh/ruff/) for Python, and [Prettier](https://prettier.io) with [oxlint](https://oxc.rs/docs/guide/usage/linter) for TypeScript.
-
-```bash
-cd api && uv run ruff format . && uv run ruff check .    # format, then lint
-cd web && pnpm format && pnpm lint && pnpm typecheck     # format, lint, type-check
-```
-
-Use `uv run ruff check --fix .` to apply safe lint fixes, and `pnpm format:check` / `uv run ruff format --check .` to check formatting without changing files (useful for CI).
-
-### Production build
-
-```bash
-cd web && pnpm build        # type-checks, then writes web/dist
-```
+CI fails on unformatted code, so run `pnpm format` before committing. Each part can also be run on its own: `cd api && uv run pytest`, `pnpm --filter @cloudvault/web test`.
 
 ## Project layout
 
 ```text
 cloudvault/
+├── package.json                 # the pnpm commands (dev, build, start, check…)
+├── pnpm-workspace.yaml          # the web app is a workspace package
+├── .github/                     # CI workflows, the smoke test and Dependabot
+├── Dockerfile                   # one image: the API and the built web app
+├── compose.yaml                 # the app with its own MinIO storage
 ├── api/
 │   ├── app/
 │   │   ├── api/routes/          # thin HTTP routes (objects, folders, uploads, trash, health)
 │   │   ├── core/                # settings and shared limits
+│   │   ├── web.py               # serves the built web app (Docker image)
 │   │   ├── schemas/             # Pydantic request/response models
 │   │   └── services/storage/    # storage abstraction + S3 implementation (trash, keys, errors)
 │   └── tests/
@@ -396,7 +464,7 @@ cloudvault/
 
 ## Deployment notes
 
-The frontend calls the API under `/api` on its own origin. In production, serve `web/dist` and the API behind one reverse proxy, or set `VITE_API_BASE_URL` at build time and add the frontend origin to `CORS_ORIGINS`.
+The frontend calls the API under `/api` on its own origin. The easiest way to run both is the [Docker image](#run-with-docker), where the API serves the built web app itself (`WEB_DIST`). Otherwise serve `web/dist` and the API behind one reverse proxy, or set `VITE_API_BASE_URL` at build time and add the frontend origin to `CORS_ORIGINS`.
 
 > ⚠️ **There is no authentication yet.** Anyone who can reach the API can read and change the whole bucket. Keep it off the public internet, or put it behind a VPN or an authenticating reverse proxy.
 
@@ -408,14 +476,14 @@ Security notes:
 
 ## Limits and known gaps
 
-| Limit | Value |
-| --- | --- |
-| Single upload size | 5 GiB by default (`MAX_UPLOAD_BYTES`), sent in parts above 64 MiB |
-| Files per zip download | 10,000 |
-| Zip built in memory (non-Chrome/Edge) | 1 GiB |
-| Items per delete request | 200 |
-| Copy, move or trash a single file | any size (over 5 GiB it is copied in parts inside storage, so it takes longer) |
-| Text preview | first 256 KB |
-| Search of the subfolders | stops after 300 matches or 50,000 objects read, and says so |
+| Limit                                 | Value                                                                          |
+| ------------------------------------- | ------------------------------------------------------------------------------ |
+| Single upload size                    | 5 TiB by default (`MAX_UPLOAD_BYTES`), sent in parts above 64 MiB              |
+| Files per zip download                | 10,000                                                                         |
+| Zip built in memory (non-Chrome/Edge) | 1 GiB                                                                          |
+| Items per delete request              | 200                                                                            |
+| Copy, move or trash a single file     | any size (over 5 GiB it is copied in parts inside storage, so it takes longer) |
+| Text preview                          | first 256 KB                                                                   |
+| Search of the subfolders              | stops after 300 matches or 50,000 objects read, and says so                    |
 
 Not built yet: authentication, and progress for a single very large file.

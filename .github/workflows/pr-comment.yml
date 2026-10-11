@@ -1,0 +1,70 @@
+name: PR comment
+
+# Posts CI's report on the pull request, as one comment that's edited on every new run.
+#
+# It runs after CI (workflow_run) instead of inside it because CI on a pull request from a fork
+# only gets a read-only token. This workflow runs from main with permission to comment, so it
+# never checks out or runs the pull request's code: it only reads the report CI saved, as text.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  actions: read
+  pull-requests: write
+
+jobs:
+  comment:
+    name: Comment the CI report
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    steps:
+      - id: report
+        uses: actions/download-artifact@v8
+        # A run that stopped before writing its report has nothing to post
+        continue-on-error: true
+        with:
+          name: ci-report
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post or update the comment
+        if: steps.report.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          pr="$(tr -dc '0-9' < pr-number)"
+          [ -n "$pr" ] || { echo "The report has no pull request number"; exit 1; }
+
+          # The number comes from the pull request's own run, so it's trusted only if that pull
+          # request is still at the commit CI ran on. This also stops a slow run for an older
+          # commit from replacing the report of a newer one.
+          head="$(gh api "repos/$REPO/pulls/$pr" --jq .head.sha)"
+          if [ "$head" != "$HEAD_SHA" ]; then
+            echo "#$pr is now at ${head:0:12}, not ${HEAD_SHA:0:12}: a newer run will comment"
+            exit 0
+          fi
+
+          marker='<!-- cloudvault-ci-report -->'
+          {
+            echo "$marker"
+            # One heading level down from the Actions summary, which suits a comment
+            sed -e 's/^## /### /' -e '1s/^# /## /' ci-report.md | head -c 60000
+            echo
+            echo "<sub>Updated automatically on every push to this pull request.</sub>"
+          } > comment.md
+
+          id="$(gh api --paginate "repos/$REPO/issues/$pr/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n 1)"
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@comment.md > /dev/null
+            echo "Updated the report on #$pr"
+          else
+            gh api -X POST "repos/$REPO/issues/$pr/comments" -F body=@comment.md > /dev/null
+            echo "Posted the report on #$pr"
+          fi

@@ -1,0 +1,6 @@
+# Generated or third-party
+pnpm-lock.yaml
+**/node_modules
+web/dist
+api/.venv
+api/uv.lock

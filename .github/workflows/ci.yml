@@ -1,0 +1,228 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+# Every gate runs even when an earlier one fails (`!cancelled()`), so the report shows all results.
+# Each job hands its gate outcomes and test counts to the `report` job, which writes the summary.
+
+jobs:
+  api:
+    name: API format, lint, tests & audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    outputs:
+      format: ${{ steps.format.outcome }}
+      lint: ${{ steps.lint.outcome }}
+      tests: ${{ steps.tests.outcome }}
+      audit: ${{ steps.audit.outcome }}
+      tests_total: ${{ steps.counts.outputs.total }}
+      tests_passed: ${{ steps.counts.outputs.passed }}
+      tests_failed: ${{ steps.counts.outputs.failed }}
+      tests_skipped: ${{ steps.counts.outputs.skipped }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - id: deps
+        run: uv sync --frozen
+      - id: format
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: uv run ruff format --check
+      - id: lint
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: uv run ruff check --output-format github
+      - id: tests
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: uv run pytest --junitxml=pytest.xml
+      - id: counts
+        if: ${{ !cancelled() && hashFiles('api/pytest.xml') != '' }}
+        run: |
+          python3 - >> "$GITHUB_OUTPUT" <<'EOF'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("pytest.xml").getroot()
+          suite = root if root.tag == "testsuite" else root.find("testsuite")
+          total, failed = int(suite.get("tests")), int(suite.get("failures")) + int(suite.get("errors"))
+          skipped = int(suite.get("skipped"))
+          print(f"total={total}\npassed={total - failed - skipped}\nfailed={failed}\nskipped={skipped}")
+          EOF
+      - id: audit
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        # Runtime dependencies only: what the server actually runs
+        run: |
+          uv export --frozen --no-dev --no-hashes --no-emit-project -o "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit --requirement "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
+
+  web:
+    name: Web format, lint, typecheck, tests, build & audit
+    runs-on: ubuntu-latest
+    outputs:
+      format: ${{ steps.format.outcome }}
+      lint: ${{ steps.lint.outcome }}
+      typecheck: ${{ steps.typecheck.outcome }}
+      tests: ${{ steps.tests.outcome }}
+      build: ${{ steps.build.outcome }}
+      audit: ${{ steps.audit.outcome }}
+      tests_total: ${{ steps.counts.outputs.total }}
+      tests_passed: ${{ steps.counts.outputs.passed }}
+      tests_failed: ${{ steps.counts.outputs.failed }}
+      tests_skipped: ${{ steps.counts.outputs.skipped }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - id: deps
+        run: pnpm install --frozen-lockfile
+      - id: format
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: pnpm exec prettier --check .
+      - id: lint
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: pnpm --filter @cloudvault/web lint
+      - id: typecheck
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: pnpm typecheck
+      - id: tests
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: pnpm --filter @cloudvault/web exec vitest run --reporter=default --reporter=json --outputFile.json=vitest.json
+      - id: counts
+        if: ${{ !cancelled() && hashFiles('web/vitest.json') != '' }}
+        working-directory: web
+        run: |
+          node -e '
+            const r = require("./vitest.json")
+            const skipped = r.numPendingTests + r.numTodoTests
+            console.log(`total=${r.numTotalTests}\npassed=${r.numPassedTests}\nfailed=${r.numFailedTests}\nskipped=${skipped}`)
+          ' >> "$GITHUB_OUTPUT"
+      - id: build
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: pnpm build
+      - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 14
+      - id: audit
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        # Production dependencies only: what ships to the browser
+        run: pnpm audit --prod
+
+  image:
+    name: Docker image
+    needs: [api, web]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      pushed: ${{ github.event_name != 'pull_request' }}
+      name: ghcr.io/${{ github.repository_owner }}/cloudvault
+      smoke: ${{ steps.smoke.outcome }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the compose file
+        run: docker compose config --quiet
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      # Run the image before publishing it: an amd64 copy (from the same cache) is started next to a
+      # MinIO storage and used for a real round trip, so an image that builds but doesn't work
+      # never reaches the registry
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: cloudvault:smoke
+          cache-from: type=gha
+      - id: smoke
+        name: Smoke test
+        run: bash .github/scripts/smoke_test.sh cloudvault:smoke
+      - uses: docker/login-action@v4
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/cloudvault
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  report:
+    name: CI report
+    needs: [api, web, image]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+      - name: Write the summary
+        env:
+          SHA: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          API_FORMAT: ${{ needs.api.outputs.format }}
+          API_LINT: ${{ needs.api.outputs.lint }}
+          API_TESTS: ${{ needs.api.outputs.tests }}
+          API_AUDIT: ${{ needs.api.outputs.audit }}
+          API_TESTS_TOTAL: ${{ needs.api.outputs.tests_total }}
+          API_TESTS_PASSED: ${{ needs.api.outputs.tests_passed }}
+          API_TESTS_FAILED: ${{ needs.api.outputs.tests_failed }}
+          API_TESTS_SKIPPED: ${{ needs.api.outputs.tests_skipped }}
+          WEB_FORMAT: ${{ needs.web.outputs.format }}
+          WEB_LINT: ${{ needs.web.outputs.lint }}
+          WEB_TYPECHECK: ${{ needs.web.outputs.typecheck }}
+          WEB_TESTS: ${{ needs.web.outputs.tests }}
+          WEB_BUILD: ${{ needs.web.outputs.build }}
+          WEB_AUDIT: ${{ needs.web.outputs.audit }}
+          WEB_TESTS_TOTAL: ${{ needs.web.outputs.tests_total }}
+          WEB_TESTS_PASSED: ${{ needs.web.outputs.tests_passed }}
+          WEB_TESTS_FAILED: ${{ needs.web.outputs.tests_failed }}
+          WEB_TESTS_SKIPPED: ${{ needs.web.outputs.tests_skipped }}
+          IMAGE: ${{ needs.image.result }}
+          IMAGE_PUSHED: ${{ needs.image.outputs.pushed }}
+          IMAGE_NAME: ${{ needs.image.outputs.name }}
+          IMAGE_SMOKE: ${{ needs.image.outputs.smoke }}
+        run: |
+          python3 .github/scripts/ci_summary.py > ci-report.md
+          cat ci-report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Save the report for the pull request comment
+        if: github.event_name == 'pull_request'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: echo "$PR_NUMBER" > pr-number
+      - uses: actions/upload-artifact@v7
+        if: github.event_name == 'pull_request'
+        with:
+          name: ci-report
+          path: |
+            ci-report.md
+            pr-number
+          retention-days: 7

@@ -4,7 +4,16 @@ from pydantic import ValidationError
 from app.core.config import Settings
 
 REQUIRED = {"S3_BUCKET": "b", "S3_ACCESS_KEY": "k", "S3_SECRET_KEY": "s"}
-CLEARED = (*REQUIRED, "S3_ENDPOINT", "STORAGE_PROVIDER", "CORS_ORIGINS")
+CLEARED = (
+    *REQUIRED,
+    "S3_ENDPOINT",
+    "S3_PUBLIC_ENDPOINT",
+    "WEB_DIST",
+    "HOST",
+    "PORT",
+    "STORAGE_PROVIDER",
+    "CORS_ORIGINS",
+)
 
 
 def make(monkeypatch, **overrides) -> Settings:

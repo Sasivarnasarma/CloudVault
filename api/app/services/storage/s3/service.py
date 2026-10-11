@@ -64,7 +64,20 @@ class S3StorageService(BaseStorageService):
         self.bucket = settings.S3_BUCKET
         self.provider = settings.STORAGE_PROVIDER
 
-        client_kwargs = {
+        # Everything the API does itself goes through `client`. Presigned links are for the
+        # browser, which may reach the storage at another address, so `signer` makes them for that
+        # one. (A link is only a signature over the address: making it needs no connection.)
+        self.client = self._make_client(settings.S3_ENDPOINT)
+        self.signer = (
+            self._make_client(settings.S3_PUBLIC_ENDPOINT)
+            if settings.S3_PUBLIC_ENDPOINT
+            else self.client
+        )
+        self._trash = S3Trash(self)
+
+    @staticmethod
+    def _make_client(endpoint: str | None):
+        kwargs = {
             "service_name": "s3",
             "region_name": settings.S3_REGION,
             "aws_access_key_id": settings.S3_ACCESS_KEY,
@@ -74,11 +87,9 @@ class S3StorageService(BaseStorageService):
                 s3={"addressing_style": settings.S3_ADDRESSING_STYLE},
             ),
         }
-        if settings.S3_ENDPOINT:
-            client_kwargs["endpoint_url"] = settings.S3_ENDPOINT
-
-        self.client = boto3.client(**client_kwargs)
-        self._trash = S3Trash(self)
+        if endpoint:
+            kwargs["endpoint_url"] = endpoint
+        return boto3.client(**kwargs)
 
     # --- shared helpers -------------------------------------------------------------
 
@@ -464,7 +475,7 @@ class S3StorageService(BaseStorageService):
         with storage_errors("generating upload URL"):
             if not allow_overwrite and self._exists(norm_key):
                 raise ObjectExistsError("A file with this name already exists")
-            upload_url = self.client.generate_presigned_url(
+            upload_url = self.signer.generate_presigned_url(
                 ClientMethod="put_object",
                 Params={"Bucket": self.bucket, "Key": norm_key, "ContentType": content_type},
                 ExpiresIn=expires_in,
@@ -505,7 +516,7 @@ class S3StorageService(BaseStorageService):
             return [
                 (
                     number,
-                    self.client.generate_presigned_url(
+                    self.signer.generate_presigned_url(
                         ClientMethod="upload_part",
                         Params={
                             "Bucket": self.bucket,
@@ -574,7 +585,7 @@ class S3StorageService(BaseStorageService):
             params["ResponseContentDisposition"] = content_disposition(filename)
 
         with storage_errors("generating download URL"):
-            download_url = self.client.generate_presigned_url(
+            download_url = self.signer.generate_presigned_url(
                 ClientMethod="get_object", Params=params, ExpiresIn=expires_in
             )
         return PresignedDownloadData(download_url=download_url, key=norm_key, expires_in=expires_in)

@@ -1,0 +1,25 @@
+{
+  "name": "cloudvault",
+  "private": true,
+  "description": "A web file manager for any S3-compatible storage.",
+  "scripts": {
+    "bootstrap": "pnpm install && cd api && uv sync",
+    "dev": "pnpm run \"/^dev:/\"",
+    "dev:api": "cd api && uv run python -m app --reload",
+    "dev:web": "pnpm --filter @cloudvault/web dev",
+    "build": "pnpm --filter @cloudvault/web build",
+    "start": "cd api && uv run python -m app --serve-web",
+    "format": "prettier --write --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude . && cd api && uv run ruff check --fix && uv run ruff format",
+    "lint": "prettier --check --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude . && pnpm --filter @cloudvault/web lint && cd api && uv run ruff check && uv run ruff format --check",
+    "typecheck": "pnpm --filter @cloudvault/web typecheck",
+    "test": "pnpm --filter @cloudvault/web test && cd api && uv run pytest",
+    "check": "pnpm lint && pnpm typecheck && pnpm test"
+  },
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.9"
+  }
+}
