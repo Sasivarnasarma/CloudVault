@@ -278,7 +278,7 @@ Files over 64 MiB are sent in parts. If the page is refreshed or the tab closes 
 
 ### Trash
 
-Deleting moves items to the reserved `.cloudvault-trash/` folder. It is hidden from the file list, and the API refuses to touch it except through the trash endpoints. A toast offers **Undo**, and the **Trash** page in the sidebar restores items or deletes them for good. Restoring never overwrites: if the name is taken again, the item stays in the trash. A file over 5 GiB cannot be moved to the trash (it cannot be copied in one step), so the app offers to delete it permanently instead.
+Deleting moves items to the reserved `.cloudvault-trash/` folder. It is hidden from the file list, and the API refuses to touch it except through the trash endpoints. A toast offers **Undo**, and the **Trash** page in the sidebar restores items or deletes them for good. Restoring never overwrites: if the name is taken again, the item stays in the trash. Files over 5 GiB go to the trash too: storage copies them in parts, which can take a while.
 
 ### Downloading folders
 
@@ -411,7 +411,7 @@ Security notes:
 | Files per zip download | 10,000 |
 | Zip built in memory (non-Chrome/Edge) | 1 GiB |
 | Items per delete request | 200 |
-| Files that can be moved to the trash | up to 5 GiB (larger files can only be deleted permanently) |
+| Copy, move or trash a single file | any size (over 5 GiB it is copied in parts inside storage, so it takes longer) |
 | Text preview | first 256 KB |
 | Search of the subfolders | stops after 300 matches or 50,000 objects read, and says so |
 

@@ -4,6 +4,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+from app.core import limits
 from app.core.config import settings
 from app.core.limits import MAX_PARTS, choose_part_size
 from app.schemas.storage import (
@@ -32,6 +33,7 @@ from app.services.storage.keys import (
     normalize_key,
     normalize_prefix,
 )
+from app.services.storage.s3.copying import copy_in_parts
 from app.services.storage.s3.errors import (
     NOT_FOUND_CODES,
     error_code,
@@ -101,11 +103,24 @@ class S3StorageService(BaseStorageService):
         return keys
 
     def _copy_one(self, source_key: str, destination_key: str) -> None:
-        self.client.copy_object(
-            Bucket=self.bucket,
-            Key=destination_key,
-            CopySource={"Bucket": self.bucket, "Key": source_key},
-        )
+        """Copy inside the bucket; an object over 5 GiB, too big for one request, goes in parts."""
+        try:
+            self.client.copy_object(
+                Bucket=self.bucket,
+                Key=destination_key,
+                CopySource={"Bucket": self.bucket, "Key": source_key},
+            )
+        except ClientError as e:
+            # Providers word "too big to copy" differently, so ask the object itself.
+            if error_code(e) in NOT_FOUND_CODES:
+                raise
+            try:
+                size = self.client.head_object(Bucket=self.bucket, Key=source_key)["ContentLength"]
+            except ClientError:
+                raise e from None
+            if size <= limits.SINGLE_COPY_MAX_BYTES:
+                raise
+            copy_in_parts(self.client, self.bucket, source_key, destination_key, size)
 
     def _delete_keys(self, keys: list[str]) -> list[str]:
         """Delete keys in batches. Returns the keys that could not be deleted."""

@@ -33,6 +33,10 @@ class FakeS3:
         self.fail_copy: set[str] = set()  # destination keys whose copy fails
         self.fail_delete: set[str] = set()  # keys that single deletes fail on
         self.undeletable: set[str] = set()  # keys that batch deletes report as errors
+        self.copy_limit: int | None = None  # a single copy of a bigger object fails
+        self.fail_part_copy: int | None = None  # this part number fails to copy
+        self.uploads: dict[str, dict] = {}  # multipart uploads in progress, by upload id
+        self.part_copy_ranges: list[str] = []
 
     # --- reading ---------------------------------------------------------------------
 
@@ -97,7 +101,39 @@ class FakeS3:
         source = CopySource["Key"]
         if source not in self.objects:
             raise _error("NoSuchKey", "CopyObject")
+        if self.copy_limit is not None and len(self.objects[source]) > self.copy_limit:
+            raise _error("EntityTooLarge", "CopyObject", 400)
         self.objects[Key] = self.objects[source]
+        return {}
+
+    def create_multipart_upload(self, Bucket: str, Key: str, **kwargs) -> dict:
+        upload_id = f"up-{len(self.uploads) + 1}"
+        self.uploads[upload_id] = {"key": Key, "parts": {}, "args": kwargs}
+        return {"UploadId": upload_id}
+
+    def upload_part_copy(
+        self, Bucket: str, Key: str, UploadId: str, PartNumber: int, CopySource: dict, **kwargs
+    ) -> dict:
+        if PartNumber == self.fail_part_copy:
+            raise _error("InternalError", "UploadPartCopy", 500)
+        first, last = (int(n) for n in kwargs["CopySourceRange"].removeprefix("bytes=").split("-"))
+        self.part_copy_ranges.append(kwargs["CopySourceRange"])
+        self.uploads[UploadId]["parts"][PartNumber] = self.objects[CopySource["Key"]][
+            first : last + 1
+        ]
+        return {"CopyPartResult": {"ETag": f'"part-{PartNumber}"'}}
+
+    def complete_multipart_upload(
+        self, Bucket: str, Key: str, UploadId: str, MultipartUpload: dict
+    ) -> dict:
+        upload = self.uploads.pop(UploadId)
+        numbers = [p["PartNumber"] for p in MultipartUpload["Parts"]]
+        assert numbers == sorted(numbers) and set(numbers) == set(upload["parts"])
+        self.objects[Key] = b"".join(upload["parts"][n] for n in numbers)
+        return {}
+
+    def abort_multipart_upload(self, Bucket: str, Key: str, UploadId: str) -> dict:
+        self.uploads.pop(UploadId, None)
         return {}
 
     def delete_object(self, Bucket: str, Key: str) -> dict:

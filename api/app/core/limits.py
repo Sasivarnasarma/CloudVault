@@ -7,6 +7,11 @@ TIB = 1024**4
 # A single presigned PUT is limited to 5 GiB by S3-compatible providers.
 SINGLE_UPLOAD_MAX_BYTES = 5 * GIB
 
+# A single copy request is limited to 5 GiB; bigger objects are copied part by part.
+SINGLE_COPY_MAX_BYTES = 5 * GIB
+COPY_PART_BYTES = 256 * MIB
+COPY_PARTS_AT_ONCE = 4
+
 # Multipart uploads: 10,000 parts max, 5 MiB min part size (except the last part).
 MAX_PARTS = 10_000
 MIN_PART_BYTES = 5 * MIB
