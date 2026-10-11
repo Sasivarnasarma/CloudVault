@@ -16,6 +16,13 @@ class StorageError(Exception):
         super().__init__(self.detail)
 
 
+class TransferCancelledError(StorageError):
+    """The caller stopped a long copy or move; what was copied so far is removed again."""
+
+    status_code = 499
+    detail = "Cancelled"
+
+
 class InvalidKeyError(StorageError):
     status_code = 400
     detail = "Invalid object key"

@@ -228,7 +228,7 @@ describe('FilesPage multi-select and bulk actions', () => {
       await user.click(within(dialog).getByRole('button', { name: 'Copy here' }));
 
       await waitFor(() => expect(copyObject).toHaveBeenCalledWith('report.pdf', 'Photos/report.pdf', false));
-      expect(copyFolder).toHaveBeenCalledWith('Reports/', 'Photos/Reports');
+      expect(copyFolder).toHaveBeenCalledWith('Reports/', 'Photos/Reports', expect.anything());
     });
 
     it('keeps the failed items selected after a partial move', async () => {

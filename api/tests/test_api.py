@@ -110,15 +110,18 @@ class FakeStorage(BaseStorageService):
         self.calls.append(("move_object", f"{source_key}->{destination_key}:{allow_overwrite}"))
         return self.copy_object(source_key, destination_key, allow_overwrite)
 
-    def copy_folder(self, source_prefix, destination_prefix):
+    def copy_folder(self, source_prefix, destination_prefix, progress=None):
         self.calls.append(("copy_folder", f"{source_prefix}->{destination_prefix}"))
         if destination_prefix in self.existing_folders:
             raise ObjectExistsError("A folder with this name already exists")
+        if progress:
+            for done in range(6):
+                progress(done, 5)
         return 5
 
-    def move_folder(self, source_prefix, destination_prefix):
+    def move_folder(self, source_prefix, destination_prefix, progress=None):
         self.calls.append(("move_folder", f"{source_prefix}->{destination_prefix}"))
-        return self.copy_folder(source_prefix, destination_prefix)
+        return self.copy_folder(source_prefix, destination_prefix, progress)
 
     def create_multipart_upload(self, key, content_type, size, allow_overwrite=False):
         self.calls.append(("mp_create", f"{key}|{content_type}|{size}|{allow_overwrite}"))

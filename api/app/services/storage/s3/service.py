@@ -18,7 +18,7 @@ from app.schemas.storage import (
     UploadedPartInfo,
 )
 from app.schemas.trash import TrashBatch, TrashFailure
-from app.services.storage.base import BaseStorageService
+from app.services.storage.base import BaseStorageService, ProgressCallback
 from app.services.storage.exceptions import (
     InvalidKeyError,
     ObjectExistsError,
@@ -378,7 +378,9 @@ class S3StorageService(BaseStorageService):
             raise InvalidKeyError("A folder cannot be moved or copied into itself")
         return source, destination
 
-    def _copy_folder_keys(self, source: str, destination: str) -> list[str]:
+    def _copy_folder_keys(
+        self, source: str, destination: str, progress: ProgressCallback | None = None
+    ) -> list[str]:
         """Copy everything under `source`, rolling back on failure. Returns the source keys."""
         keys = self._list_keys(source)
         if not keys:
@@ -388,10 +390,14 @@ class S3StorageService(BaseStorageService):
 
         copied: list[str] = []
         try:
+            if progress:
+                progress(0, len(keys))
             for key in keys:
                 target = destination + key[len(source) :]
                 self._copy_one(key, target)
                 copied.append(target)
+                if progress:
+                    progress(len(copied), len(keys))
         except Exception:
             logger.error(
                 "Folder copy '%s' -> '%s' failed after %d/%d objects; rolling back",
@@ -407,15 +413,19 @@ class S3StorageService(BaseStorageService):
             raise
         return keys
 
-    def copy_folder(self, source_prefix: str, destination_prefix: str) -> int:
+    def copy_folder(
+        self, source_prefix: str, destination_prefix: str, progress: ProgressCallback | None = None
+    ) -> int:
         source, destination = self._folder_pair(source_prefix, destination_prefix)
         with storage_errors("copying folder"):
-            return len(self._copy_folder_keys(source, destination))
+            return len(self._copy_folder_keys(source, destination, progress))
 
-    def move_folder(self, source_prefix: str, destination_prefix: str) -> int:
+    def move_folder(
+        self, source_prefix: str, destination_prefix: str, progress: ProgressCallback | None = None
+    ) -> int:
         source, destination = self._folder_pair(source_prefix, destination_prefix)
         with storage_errors("moving folder"):
-            keys = self._copy_folder_keys(source, destination)
+            keys = self._copy_folder_keys(source, destination, progress)
             failed = self._delete_keys(keys)
         if failed:
             raise StorageError(

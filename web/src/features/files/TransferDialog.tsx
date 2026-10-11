@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Button } from '../../components/common/Button';
 import { Dialog } from '../../components/common/Dialog';
 import { errorMessage } from '../../lib/cn';
 import type { Entry, TransferMode } from '../../lib/entries';
 import { entryPath, parentPrefix, validateEntryName } from '../../lib/paths';
-import { copyFolder, moveFolder } from '../../services/folderService';
+import { copyFolder, moveFolder, type FolderTransferOptions } from '../../services/folderService';
+import type { Progress } from '../../services/http';
 import { ApiError } from '../../services/http';
 import { copyObject, moveObject } from '../../services/objectService';
 import { FolderPicker } from './FolderPicker';
@@ -29,11 +30,17 @@ const COPY: Record<TransferMode, { title: string; submit: string; busy: string }
   copy: { title: 'Copy to…', submit: 'Copy here', busy: 'Copying…' },
 };
 
-async function runTransfer(entry: Entry, mode: TransferMode, destination: string, overwrite: boolean) {
+async function runTransfer(
+  entry: Entry,
+  mode: TransferMode,
+  destination: string,
+  overwrite: boolean,
+  options: FolderTransferOptions,
+) {
   if (entry.type === 'folder') {
     const to = destination.replace(/\/+$/, '');
     const from = entry.folder.prefix;
-    return mode === 'copy' ? copyFolder(from, to) : moveFolder(from, to);
+    return mode === 'copy' ? copyFolder(from, to, options) : moveFolder(from, to, options);
   }
   return mode === 'copy'
     ? copyObject(entry.file.key, destination, overwrite)
@@ -54,6 +61,11 @@ function TransferForm({
   const [browsePrefix, setBrowsePrefix] = useState(picksFolder ? startPrefix : parentPrefix(source));
   const [name, setName] = useState(entry.name);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<Progress | null>(null);
+  const running = useRef<AbortController | null>(null);
+
+  // Closing the dialog while a folder is being copied stops the copy.
+  useEffect(() => () => running.current?.abort(), []);
   const [error, setError] = useState<{ message: string; conflict: boolean } | null>(null);
 
   const parent = picksFolder ? browsePrefix : parentPrefix(source);
@@ -72,19 +84,31 @@ function TransferForm({
           : 'Choose a different folder or name.'
         : null;
   const canSubmit = !!name.trim() && !hint && !loading;
+  const busyLabel =
+    progress && progress.total > 0
+      ? `${COPY[mode].busy.replace('…', '')} ${progress.done.toLocaleString()} of ${progress.total.toLocaleString()}`
+      : COPY[mode].busy;
 
   const submit = async (overwrite = false) => {
     if (!canSubmit) return;
     setLoading(true);
     setError(null);
+    setProgress(null);
+    const controller = new AbortController();
+    running.current = controller;
     try {
-      await runTransfer(entry, mode, destination, overwrite);
+      await runTransfer(entry, mode, destination, overwrite, { signal: controller.signal, onProgress: setProgress });
       onDone({ mode, entry, destination });
       onClose();
     } catch (err) {
+      if (controller.signal.aborted) {
+        setError({ message: 'Stopped. Nothing was changed.', conflict: false });
+        return;
+      }
       const conflict = err instanceof ApiError && err.status === 409 && !isFolder;
       setError({ message: errorMessage(err, `Couldn’t ${mode} ${isFolder ? 'folder' : 'file'}.`), conflict });
     } finally {
+      running.current = null;
       setLoading(false);
     }
   };
@@ -143,12 +167,18 @@ function TransferForm({
       )}
 
       <div className="mt-6 flex justify-end gap-2">
-        <Button variant="secondary" onClick={onClose} disabled={loading}>
-          Cancel
-        </Button>
+        {loading && isFolder ? (
+          <Button variant="secondary" onClick={() => running.current?.abort()}>
+            Stop
+          </Button>
+        ) : (
+          <Button variant="secondary" onClick={onClose} disabled={loading}>
+            Cancel
+          </Button>
+        )}
         <Button type="submit" variant="primary" disabled={!canSubmit}>
           {loading && <Spinner />}
-          {loading ? COPY[mode].busy : COPY[mode].submit}
+          {loading ? busyLabel : COPY[mode].submit}
         </Button>
       </div>
     </form>

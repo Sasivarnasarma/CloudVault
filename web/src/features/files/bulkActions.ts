@@ -1,7 +1,7 @@
 import { errorMessage } from '../../lib/cn';
 import { runPool } from '../../lib/concurrency';
 import type { Entry } from '../../lib/entries';
-import { copyFolder, deleteFolder, moveFolder } from '../../services/folderService';
+import { copyFolder, deleteFolder, moveFolder, type FolderTransferOptions } from '../../services/folderService';
 import { copyObject, deleteObject, moveObject } from '../../services/objectService';
 
 export interface BulkResult<T = void> {
@@ -58,6 +58,7 @@ export async function transferEntry(
   destinationPrefix: string,
   overwrite: boolean,
   name: string = entry.name,
+  options: FolderTransferOptions = {},
 ): Promise<void> {
   const target = `${destinationPrefix}${name}`;
 
@@ -70,7 +71,7 @@ export async function transferEntry(
           : 'A folder can’t be moved or copied into itself',
       );
     }
-    await (mode === 'move' ? moveFolder(source, target) : copyFolder(source, target));
+    await (mode === 'move' ? moveFolder(source, target, options) : copyFolder(source, target, options));
     return;
   }
 

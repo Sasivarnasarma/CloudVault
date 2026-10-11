@@ -59,7 +59,7 @@ describe('FilesPage organize actions', () => {
     await user.type(input, 'Reports backup');
     await user.click(within(dialog).getByRole('button', { name: 'Copy here' }));
 
-    await waitFor(() => expect(copyFolder).toHaveBeenCalledWith('Reports/', 'Reports backup'));
+    await waitFor(() => expect(copyFolder).toHaveBeenCalledWith('Reports/', 'Reports backup', expect.anything()));
   });
 
   it('copying keeps the original selected', async () => {
@@ -136,7 +136,7 @@ describe('FilesPage drag and drop to move', () => {
     await renderPage();
     startDrag('Reports');
     dropOn(tile('Photos'));
-    await waitFor(() => expect(moveFolder).toHaveBeenCalledWith('Reports/', 'Photos/Reports'));
+    await waitFor(() => expect(moveFolder).toHaveBeenCalledWith('Reports/', 'Photos/Reports', expect.anything()));
   });
 
   it('moves items up a level when dropped on a folder in the path above the list', async () => {

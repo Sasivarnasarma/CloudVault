@@ -95,14 +95,14 @@ describe('transferEntry', () => {
     await transferEntry(file('a/x.txt'), 'copy', 'a/', false, 'x (copy).txt');
     expect(copyObject).toHaveBeenCalledWith('a/x.txt', 'a/x (copy).txt', false);
     await transferEntry(folder('Photos', 'a/'), 'copy', 'a/', false, 'Photos (copy)');
-    expect(copyFolder).toHaveBeenCalledWith('a/Photos/', 'a/Photos (copy)');
+    expect(copyFolder).toHaveBeenCalledWith('a/Photos/', 'a/Photos (copy)', expect.anything());
   });
 
   it('moves and copies folders without a trailing slash on the target', async () => {
     await transferEntry(folder('Photos', 'a/'), 'move', 'b/', false);
-    expect(moveFolder).toHaveBeenCalledWith('a/Photos/', 'b/Photos');
+    expect(moveFolder).toHaveBeenCalledWith('a/Photos/', 'b/Photos', expect.anything());
     await transferEntry(folder('Photos'), 'copy', 'archive/', false);
-    expect(copyFolder).toHaveBeenCalledWith('Photos/', 'archive/Photos');
+    expect(copyFolder).toHaveBeenCalledWith('Photos/', 'archive/Photos', expect.anything());
   });
 
   it('refuses to move a file onto itself, and a folder into itself or where it already is', async () => {
@@ -117,7 +117,7 @@ describe('transferEntry', () => {
 
   it('allows a folder next to one whose name starts the same', async () => {
     await transferEntry(folder('docs'), 'move', 'docs2/', false);
-    expect(moveFolder).toHaveBeenCalledWith('docs/', 'docs2/docs');
+    expect(moveFolder).toHaveBeenCalledWith('docs/', 'docs2/docs', expect.anything());
   });
 
   it('passes API failures through as errors', async () => {

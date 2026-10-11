@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
+from app.api.streaming import progress_stream, wants_progress
 from app.core.limits import MAX_ARCHIVE_FILES
 from app.schemas.folder import (
     CreateFolderRequest,
@@ -39,28 +40,48 @@ def delete_folder(
 
 @router.post("/copy", response_model=TransferFolderResponse)
 def copy_folder(
+    request: Request,
     payload: TransferFolderRequest,
     storage: BaseStorageService = Depends(get_storage_service),
 ):
-    """Recursively copy a folder to a new path. Never overwrites existing content."""
+    """Recursively copy a folder to a new path. Never overwrites existing content.
+
+    Send `Accept: application/x-ndjson` to follow the progress as it happens.
+    """
     source, destination = normalize_folder(payload.source), normalize_folder(payload.destination)
-    count = storage.copy_folder(source, destination)
-    return TransferFolderResponse(
-        success=True, source=source, destination=destination, item_count=count
-    )
+
+    def run(progress=None) -> TransferFolderResponse:
+        count = storage.copy_folder(source, destination, progress)
+        return TransferFolderResponse(
+            success=True, source=source, destination=destination, item_count=count
+        )
+
+    if wants_progress(request):
+        return progress_stream(lambda progress: run(progress).model_dump())
+    return run()
 
 
 @router.post("/move", response_model=TransferFolderResponse)
 def move_folder(
+    request: Request,
     payload: TransferFolderRequest,
     storage: BaseStorageService = Depends(get_storage_service),
 ):
-    """Move or rename a folder. Never overwrites existing content."""
+    """Move or rename a folder. Never overwrites existing content.
+
+    Send `Accept: application/x-ndjson` to follow the progress as it happens.
+    """
     source, destination = normalize_folder(payload.source), normalize_folder(payload.destination)
-    count = storage.move_folder(source, destination)
-    return TransferFolderResponse(
-        success=True, source=source, destination=destination, item_count=count
-    )
+
+    def run(progress=None) -> TransferFolderResponse:
+        count = storage.move_folder(source, destination, progress)
+        return TransferFolderResponse(
+            success=True, source=source, destination=destination, item_count=count
+        )
+
+    if wants_progress(request):
+        return progress_stream(lambda progress: run(progress).model_dump())
+    return run()
 
 
 @router.get("/tree", response_model=FolderTreeResponse)

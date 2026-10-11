@@ -84,7 +84,7 @@ describe('FilesPage clipboard (Ctrl+C / Ctrl+X / Ctrl+V)', () => {
     await user.dblClick(screen.getByText('Photos'));
     await waitFor(() => expect(window.location.search).toBe('?p=Photos'));
     await user.keyboard('{Control>}v{/Control}');
-    await waitFor(() => expect(copyFolder).toHaveBeenCalledWith('Reports/', 'Photos/Reports'));
+    await waitFor(() => expect(copyFolder).toHaveBeenCalledWith('Reports/', 'Photos/Reports', expect.anything()));
   });
 
   it('names a copy pasted next to its original instead of failing', async () => {

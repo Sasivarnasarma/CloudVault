@@ -76,7 +76,7 @@ describe('TransferDialog', () => {
       const { user } = setup(folderEntry, 'rename');
       await user.clear(nameInput());
       await user.type(nameInput(), 'renamed{Enter}');
-      await waitFor(() => expect(moveFolder).toHaveBeenCalledWith('docs/old/', 'docs/renamed'));
+      await waitFor(() => expect(moveFolder).toHaveBeenCalledWith('docs/old/', 'docs/renamed', expect.anything()));
     });
 
     it.each(['a/b', 'a\\b', '..', '   '])('blocks the invalid name %j', async (value) => {
@@ -136,7 +136,7 @@ describe('TransferDialog', () => {
     it('copies a folder to a new location', async () => {
       const { user, onDone } = setup(folderEntry, 'copy', 'archive/');
       await user.click(submitButton('Copy here'));
-      await waitFor(() => expect(copyFolder).toHaveBeenCalledWith('docs/old/', 'archive/old'));
+      await waitFor(() => expect(copyFolder).toHaveBeenCalledWith('docs/old/', 'archive/old', expect.anything()));
       expect(onDone).toHaveBeenCalledWith({ mode: 'copy', entry: folderEntry, destination: 'archive/old/' });
     });
 

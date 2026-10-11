@@ -57,7 +57,7 @@ describe('BulkTransferDialog', () => {
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
     expect(moveObject).toHaveBeenCalledWith('a.txt', 'Archive/a.txt', false);
     expect(moveObject).toHaveBeenCalledWith('b.txt', 'Archive/b.txt', false);
-    expect(moveFolder).toHaveBeenCalledWith('Photos/', 'Archive/Photos');
+    expect(moveFolder).toHaveBeenCalledWith('Photos/', 'Archive/Photos', expect.anything());
     expect(onDone.mock.calls[0][0]).toBe('move');
     expect(onDone.mock.calls[0][1].every((r: { ok: boolean }) => r.ok)).toBe(true);
     expect(onClose).toHaveBeenCalled();
@@ -69,7 +69,7 @@ describe('BulkTransferDialog', () => {
     await user.click(await screen.findByRole('button', { name: 'Archive' }));
     await user.click(screen.getByRole('button', { name: 'Copy here' }));
     await waitFor(() => expect(copyObject).toHaveBeenCalledWith('a.txt', 'Archive/a.txt', false));
-    expect(copyFolder).toHaveBeenCalledWith('Photos/', 'Archive/Photos');
+    expect(copyFolder).toHaveBeenCalledWith('Photos/', 'Archive/Photos', expect.anything());
   });
 
   it('only offers the replace option when files are involved, and passes it on', async () => {

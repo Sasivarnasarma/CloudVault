@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { errorMessage } from '../../lib/cn';
 import type { Entry, TransferMode } from '../../lib/entries';
+import type { Progress } from '../../services/http';
 import type { BulkTransferTarget } from './BulkTransferDialog';
 import { describeEntries, runBulk, summarize, transferEntry, type BulkResult } from './bulkActions';
 import type { SelectionState } from './useSelection';
@@ -46,7 +47,10 @@ export function useTransfers({ selection, onRefresh }: Options) {
     };
 
     if (succeeded.length > 0)
-      toast.success(`${verb} ${describeEntries(succeeded.map((r) => r.entry))}`, { id: takeId() });
+      toast.success(`${verb} ${describeEntries(succeeded.map((r) => r.entry))}`, {
+        id: takeId(),
+        description: undefined,
+      });
     if (failed.length > 0) {
       const what =
         results.length === 1
@@ -74,13 +78,50 @@ export function useTransfers({ selection, onRefresh }: Options) {
   ): Promise<BulkResult[] | null> => {
     setTransferring(true);
     setMovingIds(mode === 'move' ? items.map((e) => e.id) : []);
-    const toastId = toast.loading(`${mode === 'move' ? 'Moving' : 'Copying'} ${describeEntries(items)}…`);
+    const controller = new AbortController();
+    const what = `${mode === 'move' ? 'Moving' : 'Copying'} ${describeEntries(items)}`;
+    // Folders report how many files they have copied; the toast adds them up.
+    const progress = new Map<string, Progress>();
+    const toastId = toast.loading(`${what}…`, { action: { label: 'Cancel', onClick: () => controller.abort() } });
+    const showProgress = () => {
+      let done = 0;
+      let total = 0;
+      progress.forEach((p) => {
+        done += p.done;
+        total += p.total;
+      });
+      toast.loading(`${what}…`, {
+        id: toastId,
+        description: total > 0 ? `${done.toLocaleString()} of ${total.toLocaleString()} files` : undefined,
+        action: { label: 'Cancel', onClick: () => controller.abort() },
+      });
+    };
     try {
-      const results = await runBulk(items, (entry) => transferEntry(entry, mode, destination, false, nameFor?.(entry)));
+      const results = await runBulk(items, (entry) =>
+        transferEntry(entry, mode, destination, false, nameFor?.(entry), {
+          signal: controller.signal,
+          onProgress: (p) => {
+            progress.set(entry.id, p);
+            showProgress();
+          },
+        }),
+      );
+      if (controller.signal.aborted) {
+        const finished = results.filter((r) => r.ok);
+        toast.info(
+          finished.length > 0
+            ? `Stopped. ${describeEntries(finished.map((r) => r.entry))} had already been ${mode === 'move' ? 'moved' : 'copied'}.`
+            : 'Stopped. Nothing was changed.',
+          { id: toastId, description: undefined },
+        );
+        selection.replace(results.filter((r) => !r.ok).map((r) => r.entry.id));
+        onRefresh();
+        return results;
+      }
       onBulkTransferDone(mode, results, toastId);
       return results;
     } catch (err) {
-      toast.error(errorMessage(err, `Couldn’t ${mode} the items`), { id: toastId });
+      toast.error(errorMessage(err, `Couldn’t ${mode} the items`), { id: toastId, description: undefined });
       return null;
     } finally {
       setMovingIds([]);

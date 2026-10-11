@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 
 from app.schemas.storage import (
     FolderItem,
@@ -11,6 +12,8 @@ from app.schemas.storage import (
     UploadedPartInfo,
 )
 from app.schemas.trash import TrashBatch, TrashFailure
+
+ProgressCallback = Callable[[int, int], None]
 
 
 class BaseStorageService(ABC):
@@ -99,12 +102,23 @@ class BaseStorageService(ABC):
     # --- folder copies and moves ----------------------------------------------------
 
     @abstractmethod
-    def copy_folder(self, source_prefix: str, destination_prefix: str) -> int:
-        """Recursively copy a folder. Never overwrites; returns the number of objects copied."""
+    def copy_folder(
+        self, source_prefix: str, destination_prefix: str, progress: ProgressCallback | None = None
+    ) -> int:
+        """Recursively copy a folder. Never overwrites; returns the number of objects copied.
+
+        `progress(done, total)` is called before the first object and after each one. It may raise
+        to stop the copy, which then removes what it has copied so far.
+        """
 
     @abstractmethod
-    def move_folder(self, source_prefix: str, destination_prefix: str) -> int:
-        """Recursively move a folder. Never overwrites; returns the number of objects moved."""
+    def move_folder(
+        self, source_prefix: str, destination_prefix: str, progress: ProgressCallback | None = None
+    ) -> int:
+        """Recursively move a folder. Never overwrites; returns the number of objects moved.
+
+        `progress` reports the copying, the long part (see `copy_folder`).
+        """
 
     # --- trash ----------------------------------------------------------------------
 
