@@ -1,5 +1,6 @@
 import { installPageMocks, renderPage } from './filesPage.testkit';
 import { act, screen, waitFor } from '@testing-library/react';
+import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { copyFolder, moveFolder } from '../services/folderService';
 
@@ -48,13 +49,15 @@ describe('FilesPage: following a long copy or move', () => {
           signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
         }),
     );
+    // Checked on the call: the toast itself fades after a few seconds, which a slow machine can outlast.
+    const info = vi.spyOn(toast, 'info');
     const user = await renderPage();
     await pasteReportsIntoPhotos(user, 'x');
 
     await user.click(await screen.findByRole('button', { name: 'Cancel' }));
 
     expect(signal?.aborted).toBe(true);
-    expect(await screen.findByText('Stopped. Nothing was changed.')).toBeInTheDocument();
+    await waitFor(() => expect(info).toHaveBeenCalledWith('Stopped. Nothing was changed.', expect.anything()));
     expect(screen.queryByText(/Couldn’t move/)).not.toBeInTheDocument();
   });
 });

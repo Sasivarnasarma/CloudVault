@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Entry } from '../../lib/entries';
 import { makeFile, makeFolder } from '../../test/fixtures';
+import { useUndoStack } from '../files/useUndoStack';
 import { useMoveToTrash } from './useMoveToTrash';
 
 vi.mock('../../services/trashService', () => ({ moveToTrash: vi.fn(), restoreFromTrash: vi.fn() }));
@@ -31,7 +32,10 @@ const batch = (paths: string[]) => ({
 
 function setup() {
   const h = { onMoved: vi.fn(), onRefresh: vi.fn(), onDeleteForever: vi.fn() };
-  const { result } = renderHook(() => useMoveToTrash(h));
+  const { result } = renderHook(() => {
+    const undoStack = useUndoStack();
+    return { ...useMoveToTrash({ ...h, undoStack }), undoLast: undoStack.undoLast };
+  });
   return { result, ...h };
 }
 

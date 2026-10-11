@@ -28,6 +28,7 @@ import { useFolderView } from '../features/files/useFolderView';
 import { useObjects } from '../features/files/useObjects';
 import { useSelection } from '../features/files/useSelection';
 import { useTransfers } from '../features/files/useTransfers';
+import { useUndoStack } from '../features/files/useUndoStack';
 import { useZipDownload } from '../features/files/useZipDownload';
 import { useMoveToTrash } from '../features/trash/useMoveToTrash';
 import { CreateFolderModal } from '../features/folders/CreateFolderModal';
@@ -90,12 +91,14 @@ export function FilesPage() {
 
   const uploads = useFolderUploads(currentPrefix, refetch);
   const deletes = useDeleteActions({ onDeleted: selection.remove, onRefresh: refetch });
+  const undoStack = useUndoStack();
   const trash = useMoveToTrash({
     onMoved: selection.remove,
     onRefresh: refetch,
     onDeleteForever: deletes.request,
+    undoStack,
   });
-  const transfers = useTransfers({ selection, onRefresh: refetch });
+  const transfers = useTransfers({ selection, onRefresh: refetch, undoStack });
   const drag = useDragMove({ entries: view.allEntries, currentPrefix, run: transfers.run });
   const zip = useZipDownload();
   const clipboard = useClipboard({ selected, entries: view.allEntries, currentPrefix, transfers });
@@ -130,7 +133,7 @@ export function FilesPage() {
       if (selected.length === 0) return false;
       deletes.request(selected);
     },
-    undo: trash.undoLast,
+    undo: undoStack.undoLast,
     rename: () => {
       if (!onlySelected) return false;
       transfers.openTransfer({ entry: onlySelected, mode: 'rename' });

@@ -4,39 +4,91 @@ import { errorMessage } from '../../lib/cn';
 import type { Entry, TransferMode } from '../../lib/entries';
 import type { Progress } from '../../services/http';
 import type { BulkTransferTarget } from './BulkTransferDialog';
-import { describeEntries, runBulk, summarize, transferEntry, type BulkResult } from './bulkActions';
+import {
+  describeEntries,
+  revertTransfers,
+  runBulk,
+  summarize,
+  transferEntry,
+  type TransferResult,
+  type TransferRecord,
+} from './bulkActions';
+import type { UndoStack } from './useUndoStack';
 import type { SelectionState } from './useSelection';
 import type { TransferTarget } from './TransferDialog';
 
 interface Options {
   selection: Pick<SelectionState, 'remove' | 'replace'>;
   onRefresh: () => void;
+  undoStack: Pick<UndoStack, 'push' | 'undo'>;
 }
+
+/** How long the "Undo" button stays on the toast. */
+const UNDO_TOAST_MS = 8000;
 
 /**
  * Renaming, moving and copying. The dialogs (one item, or several) report back here to show the
  * result; `run` moves or copies items straight away for drag and drop and paste, with a spinner on
  * the moved items and a toast that turns from "Moving…" into the result.
  */
-export function useTransfers({ selection, onRefresh }: Options) {
+export function useTransfers({ selection, onRefresh, undoStack }: Options) {
   const [transfer, setTransfer] = useState<TransferTarget | null>(null);
   const [bulkTransfer, setBulkTransfer] = useState<BulkTransferTarget | null>(null);
   const [movingIds, setMovingIds] = useState<string[]>([]);
   const [transferring, setTransferring] = useState(false);
 
+  /** Put what a move or a copy did back. */
+  const undoTransfer = async (mode: 'move' | 'copy', records: TransferRecord[]) => {
+    const toastId = toast.loading('Undoing…');
+    const { undone, failed } = await revertTransfers(mode, records);
+    const count = undone.length;
+    if (count > 0) {
+      const message =
+        mode === 'move'
+          ? `Moved ${count} ${count === 1 ? 'item' : 'items'} back`
+          : count === 1
+            ? 'Removed the copy'
+            : `Removed ${count} copies`;
+      toast.success(message, {
+        id: toastId,
+        description: undefined,
+      });
+    }
+    if (failed.length > 0) {
+      toast.error(`Couldn’t undo ${failed.length === 1 ? 'one item' : `${failed.length} items`}`, {
+        id: undone.length === 0 ? toastId : undefined,
+        description: failed[0].error,
+      });
+    }
+    onRefresh();
+  };
+
+  /** Remember how to undo a move or a copy, and give back the toast action that does it. */
+  const undoable = (mode: 'move' | 'copy', records: TransferRecord[]) => {
+    if (records.length === 0) return {};
+    const id = undoStack.push(() => undoTransfer(mode, records));
+    return { duration: UNDO_TOAST_MS, action: { label: 'Undo', onClick: () => void undoStack.undo(id) } };
+  };
+
   /** A rename, move or copy of one item finished in its dialog. */
   const onTransferDone = ({ mode, entry, destination }: { mode: TransferMode; entry: Entry; destination: string }) => {
     const verb = { rename: 'Renamed', move: 'Moved', copy: 'Copied' }[mode];
     const target = destination.replace(/\/+$/, '');
+    const record: TransferRecord = {
+      type: entry.type,
+      from: entry.type === 'folder' ? entry.folder.prefix : entry.file.key,
+      to: entry.type === 'folder' ? `${target}/` : target,
+    };
     toast.success(
       mode === 'rename' ? `${verb} to “${target.split('/').pop()}”` : `${verb} “${entry.name}” to ${target}`,
+      undoable(mode === 'copy' ? 'copy' : 'move', [record]),
     );
     if (mode !== 'copy') selection.remove([entry.id]);
     onRefresh();
   };
 
   /** Several items were moved or copied. `toastId` is a loading toast to turn into the result. */
-  const onBulkTransferDone = (mode: 'move' | 'copy', results: BulkResult[], toastId?: string | number) => {
+  const onBulkTransferDone = (mode: 'move' | 'copy', results: TransferResult[], toastId?: string | number) => {
     const { succeeded, failed } = summarize(results);
     const verb = mode === 'move' ? 'Moved' : 'Copied';
     let id = toastId;
@@ -46,11 +98,14 @@ export function useTransfers({ selection, onRefresh }: Options) {
       return current;
     };
 
-    if (succeeded.length > 0)
+    if (succeeded.length > 0) {
+      const records = succeeded.flatMap((r) => (r.value ? [r.value] : []));
       toast.success(`${verb} ${describeEntries(succeeded.map((r) => r.entry))}`, {
         id: takeId(),
         description: undefined,
+        ...undoable(mode, records),
       });
+    }
     if (failed.length > 0) {
       const what =
         results.length === 1
@@ -75,7 +130,7 @@ export function useTransfers({ selection, onRefresh }: Options) {
     mode: 'move' | 'copy',
     destination: string,
     nameFor?: (entry: Entry) => string | undefined,
-  ): Promise<BulkResult[] | null> => {
+  ): Promise<TransferResult[] | null> => {
     setTransferring(true);
     setMovingIds(mode === 'move' ? items.map((e) => e.id) : []);
     const controller = new AbortController();

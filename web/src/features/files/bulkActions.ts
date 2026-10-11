@@ -51,7 +51,17 @@ export async function deleteEntry(entry: Entry): Promise<number> {
   return 1;
 }
 
-/** Move or copy one entry into the folder `destinationPrefix`, keeping its name unless `name` is given. */
+/** One file or folder that was moved or copied: where it was and where it went (folders end in "/"). */
+export interface TransferRecord {
+  type: 'file' | 'folder';
+  from: string;
+  to: string;
+}
+
+/**
+ * Move or copy one entry into the folder `destinationPrefix`, keeping its name unless `name` is given.
+ * Returns what was done so it can be undone, or null when it replaced something (that can't be undone).
+ */
 export async function transferEntry(
   entry: Entry,
   mode: 'move' | 'copy',
@@ -59,7 +69,7 @@ export async function transferEntry(
   overwrite: boolean,
   name: string = entry.name,
   options: FolderTransferOptions = {},
-): Promise<void> {
+): Promise<TransferRecord | null> {
   const target = `${destinationPrefix}${name}`;
 
   if (entry.type === 'folder') {
@@ -72,14 +82,45 @@ export async function transferEntry(
       );
     }
     await (mode === 'move' ? moveFolder(source, target, options) : copyFolder(source, target, options));
-    return;
+    return { type: 'folder', from: source, to: `${target}/` };
   }
 
   if (target === entry.file.key) throw new Error('Already in this folder');
   await (mode === 'move'
     ? moveObject(entry.file.key, target, overwrite)
     : copyObject(entry.file.key, target, overwrite));
+  return overwrite ? null : { type: 'file', from: entry.file.key, to: target };
 }
+
+/**
+ * Put moved items back where they were, or remove the copies that were made. Nothing is overwritten:
+ * an item whose old place is taken again stays where it is. Returns what could not be undone.
+ */
+export async function revertTransfers(
+  mode: 'move' | 'copy',
+  records: TransferRecord[],
+): Promise<{ undone: TransferRecord[]; failed: { record: TransferRecord; error: string }[] }> {
+  const undone: TransferRecord[] = [];
+  const failed: { record: TransferRecord; error: string }[] = [];
+  await runPool(records, 4, async (record) => {
+    try {
+      if (mode === 'copy') {
+        await (record.type === 'folder' ? deleteFolder(record.to) : deleteObject(record.to));
+      } else if (record.type === 'folder') {
+        await moveFolder(record.to, record.from.replace(/\/+$/, ''));
+      } else {
+        await moveObject(record.to, record.from, false);
+      }
+      undone.push(record);
+    } catch (err) {
+      failed.push({ record, error: errorMessage(err, 'Failed') });
+    }
+  });
+  return { undone, failed };
+}
+
+/** What happened to one entry that was moved or copied. */
+export type TransferResult = BulkResult<TransferRecord | null>;
 
 export function summarize<T>(results: BulkResult<T>[]): { succeeded: BulkResult<T>[]; failed: BulkResult<T>[] } {
   return { succeeded: results.filter((r) => r.ok), failed: results.filter((r) => !r.ok) };

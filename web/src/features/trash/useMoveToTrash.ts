@@ -1,10 +1,11 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { errorMessage } from '../../lib/cn';
 import type { Entry } from '../../lib/entries';
 import { entryPath } from '../../lib/paths';
 import { moveToTrash, restoreFromTrash } from '../../services/trashService';
 import { describeEntries } from '../files/bulkActions';
+import type { UndoStack } from '../files/useUndoStack';
 
 /** How long the "Undo" button stays on the toast. */
 const UNDO_TOAST_MS = 8000;
@@ -14,22 +15,22 @@ interface Options {
   onMoved: (ids: string[]) => void;
   /** The folder's contents changed: load them again. */
   onRefresh: () => void;
-  /** Offered for items that cannot go to the trash (too big): delete them for good instead. */
+  /** Offered for items that cannot go to the trash: delete them for good instead. */
   onDeleteForever: (entries: Entry[]) => void;
+  /** Where the way to undo each delete is kept. */
+  undoStack: Pick<UndoStack, 'push' | 'undo'>;
 }
 
 /**
- * "Delete" for files and folders: they go to the trash and a toast offers Undo. Ctrl+Z undoes the
- * most recent delete for as long as the page stays open.
+ * "Delete" for files and folders: they go to the trash and a toast offers Undo (Ctrl+Z does the same,
+ * through the undo stack).
  */
-export function useMoveToTrash({ onMoved, onRefresh, onDeleteForever }: Options) {
+export function useMoveToTrash({ onMoved, onRefresh, onDeleteForever, undoStack }: Options) {
   const [busy, setBusy] = useState(false);
-  const lastBatch = useRef<string | null>(null);
 
   /** Put a batch back where it was. */
   const undo = useCallback(
     async (batchId: string) => {
-      if (lastBatch.current === batchId) lastBatch.current = null;
       try {
         const { restored, failed } = await restoreFromTrash(batchId);
         if (restored.length > 0) {
@@ -59,11 +60,11 @@ export function useMoveToTrash({ onMoved, onRefresh, onDeleteForever }: Options)
         const moved = entries.filter((e) => !failedPaths.has(entryPath(e)));
 
         if (batch) {
-          lastBatch.current = batch.id;
+          const undoId = undoStack.push(() => undo(batch.id));
           onMoved(moved.map((e) => e.id));
           toast.success(`Moved ${describeEntries(moved)} to the trash`, {
             duration: UNDO_TOAST_MS,
-            action: { label: 'Undo', onClick: () => void undo(batch.id) },
+            action: { label: 'Undo', onClick: () => void undoStack.undo(undoId) },
           });
         }
         if (failed.length > 0) {
@@ -85,14 +86,8 @@ export function useMoveToTrash({ onMoved, onRefresh, onDeleteForever }: Options)
         setBusy(false);
       }
     },
-    [onMoved, onRefresh, onDeleteForever, undo],
+    [onMoved, onRefresh, onDeleteForever, undo, undoStack],
   );
 
-  /** Undo the most recent delete. Returns false when there is nothing to undo. */
-  const undoLast = useCallback((): false | void => {
-    if (!lastBatch.current) return false;
-    void undo(lastBatch.current);
-  }, [undo]);
-
-  return { request, undoLast, busy };
+  return { request, busy };
 }

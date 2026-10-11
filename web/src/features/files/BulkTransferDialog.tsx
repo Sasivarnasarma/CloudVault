@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Button } from '../../components/common/Button';
 import { Dialog } from '../../components/common/Dialog';
 import type { Entry } from '../../lib/entries';
-import { describeEntries, runBulk, summarize, transferEntry, type BulkResult } from './bulkActions';
+import { describeEntries, runBulk, summarize, transferEntry, type TransferResult } from './bulkActions';
 import { FolderPicker } from './FolderPicker';
 import { Spinner } from '../../components/common/Spinner';
 
@@ -17,7 +17,7 @@ interface BulkTransferDialogProps {
   startPrefix: string;
   onClose: () => void;
   /** Called once every item has been attempted, whether or not all of them worked. */
-  onDone: (mode: 'move' | 'copy', results: BulkResult[]) => void;
+  onDone: (mode: 'move' | 'copy', results: TransferResult[]) => void;
 }
 
 function BulkTransferForm({
@@ -30,7 +30,7 @@ function BulkTransferForm({
   const [prefix, setPrefix] = useState(startPrefix);
   const [replace, setReplace] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [failures, setFailures] = useState<BulkResult[] | null>(null);
+  const [failures, setFailures] = useState<TransferResult[] | null>(null);
 
   const hasFiles = entries.some((e) => e.type === 'file');
   const excluded = useMemo(

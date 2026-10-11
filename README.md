@@ -92,6 +92,7 @@ The coursework shaped the design, and its distributed-systems ideas are still vi
 ### 🗑️ Trash and undo
 
 - Deleting moves items to a reserved `.cloudvault-trash/` folder instead of erasing them. A toast offers **Undo**, and **Ctrl/⌘+Z** undoes the last delete.
+- **Moves, renames and pastes can be undone too**, from the toast or with **Ctrl/⌘+Z**, one change after another (the last 20 while the page stays open). Undoing a move puts items back without overwriting anything; undoing a paste that copied removes the copies. A copy that replaced an existing file can't be undone.
 - A **Trash page** restores items to where they were (never overwriting anything) or deletes them for good.
 - **Shift+Delete** deletes permanently after a confirmation.
 
@@ -308,7 +309,7 @@ Shortcuts work like a desktop file manager and switch off while you type in a fi
 | | Copy / cut / paste here | <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd> |
 | | Move to trash | <kbd>Delete</kbd> |
 | | Delete forever | <kbd>Shift</kbd>+<kbd>Delete</kbd> |
-| | Undo the last delete | <kbd>Ctrl</kbd>+<kbd>Z</kbd> |
+| | Undo the last change (delete, move, rename or paste) | <kbd>Ctrl</kbd>+<kbd>Z</kbd> |
 | | Open the item's menu | <kbd>Shift</kbd>+<kbd>F10</kbd> or <kbd>Menu</kbd> |
 | **Upload and view** | New folder | <kbd>Alt</kbd>+<kbd>N</kbd> |
 | | Upload files / a folder | <kbd>Ctrl</kbd>+<kbd>U</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> |
@@ -415,4 +416,4 @@ Security notes:
 | Text preview | first 256 KB |
 | Search of the subfolders | stops after 300 matches or 50,000 objects read, and says so |
 
-Not built yet: authentication, undo for moves, renames and pastes, restoring a single item from a deleted batch, progress for a single very large file, and touch drag-and-drop.
+Not built yet: authentication, restoring a single item from a deleted batch, progress for a single very large file, and touch drag-and-drop.

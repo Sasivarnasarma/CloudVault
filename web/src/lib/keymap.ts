@@ -69,7 +69,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { group: 'Work with items', label: 'Paste here', chords: ['mod+v'], action: 'paste' },
   { group: 'Work with items', label: 'Move to trash', chords: ['Delete'], action: 'deleteSelected' },
   { group: 'Work with items', label: 'Delete forever', chords: ['shift+Delete'], action: 'deleteForever' },
-  { group: 'Work with items', label: 'Undo the last delete', chords: ['mod+z'], action: 'undo' },
+  { group: 'Work with items', label: 'Undo the last change', chords: ['mod+z'], action: 'undo' },
   {
     group: 'Work with items',
     label: 'Open the item’s menu',
