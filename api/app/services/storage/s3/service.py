@@ -152,6 +152,21 @@ class S3StorageService(BaseStorageService):
             logger.warning("Storage connection check failed for bucket '%s': %s", self.bucket, e)
             return False
 
+    def ensure_bucket(self) -> bool:
+        try:
+            self.client.head_bucket(Bucket=self.bucket)
+            return False
+        except ClientError as e:
+            if error_code(e) not in NOT_FOUND_CODES | {"NoSuchBucket"}:
+                raise
+        args: dict = {"Bucket": self.bucket}
+        # us-east-1 (and storages without regions, like R2's "auto") take no location
+        if settings.S3_REGION not in ("us-east-1", "auto"):
+            args["CreateBucketConfiguration"] = {"LocationConstraint": settings.S3_REGION}
+        with storage_errors("creating the bucket"):
+            self.client.create_bucket(**args)
+        return True
+
     # --- listing --------------------------------------------------------------------
 
     @staticmethod

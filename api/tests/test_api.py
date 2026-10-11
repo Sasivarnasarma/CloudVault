@@ -45,6 +45,10 @@ class FakeStorage(BaseStorageService):
     def check_connection(self) -> bool:
         return self.connected
 
+    def ensure_bucket(self) -> bool:
+        self.calls.append(("ensure_bucket", ""))
+        return True
+
     def list_objects(self, prefix: str = "", delimiter: str = "/"):
         self.calls.append(("list", prefix))
         if self.fail_with:

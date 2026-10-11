@@ -2,9 +2,10 @@
 #
 #   docker compose up --build        → http://localhost:8000
 #
-# This starts the app, a MinIO storage (console on http://localhost:9001) and creates the bucket.
-# The data lives in the `minio-data` volume. The default login is cloudvault / cloudvault-secret:
-# fine on your own machine, change it (see .env.example) before putting this anywhere else.
+# This starts the app and a RustFS storage (an open-source, S3-compatible store; its console is on
+# http://localhost:9001), and the app creates the bucket on its first start. The data lives in the
+# `storage-data` volume. The default login is cloudvault / cloudvault-secret: fine on your own
+# machine, change it (see .env.example) before putting this anywhere else.
 #
 # To use a storage you already have (Cloudflare R2, AWS S3, another MinIO) instead, put its
 # settings in a `.env` file next to this one (see .env.example) and start only the app:
@@ -13,20 +14,20 @@
 #
 # Files go straight between the browser and the storage through presigned links, so the browser
 # must be able to reach the storage too. S3_PUBLIC_ENDPOINT is the address the browser uses; the
-# app itself talks to S3_ENDPOINT. With the bundled MinIO they are two names for the same storage.
+# app itself talks to S3_ENDPOINT. With the bundled storage they are two names for the same store.
 
 name: cloudvault
 
 services:
   cloudvault:
     build: .
-    image: cloudvault:local
+    image: ${CLOUDVAULT_IMAGE:-cloudvault:local}
     ports:
       - '8000:8000'
     environment:
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-minio}
-      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
-      # Without a storage of your own the links point at the bundled MinIO as the browser sees it;
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://storage:9000}
+      # Without a storage of your own the links point at the bundled one as the browser sees it;
       # with one (S3_ENDPOINT set) they use that address, unless you give another here
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-${S3_ENDPOINT:-http://localhost:9000}}
       S3_REGION: ${S3_REGION:-us-east-1}
@@ -34,46 +35,33 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-cloudvault}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-cloudvault-secret}
       S3_ADDRESSING_STYLE: ${S3_ADDRESSING_STYLE:-path}
+      # A fresh local storage has no bucket yet. Turn this off for a real one (see .env.example).
+      S3_CREATE_BUCKET: ${S3_CREATE_BUCKET:-true}
     depends_on:
-      minio-setup:
-        condition: service_completed_successfully
+      storage:
+        condition: service_healthy
     restart: unless-stopped
 
-  minio:
-    image: quay.io/minio/minio
-    command: server /data --console-address ':9001'
+  storage:
+    image: rustfs/rustfs:${RUSTFS_VERSION:-1.0.1}
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-cloudvault}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-cloudvault-secret}
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-cloudvault}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-cloudvault-secret}
+      RUSTFS_CONSOLE_ENABLE: 'true'
       # The page is served from port 8000 and sends files straight to port 9000
-      MINIO_API_CORS_ALLOW_ORIGIN: http://localhost:8000
+      RUSTFS_CORS_ALLOWED_ORIGINS: http://localhost:8000
     ports:
       - '9000:9000'
       - '9001:9001'
     volumes:
-      - minio-data:/data
+      - storage-data:/data
     healthcheck:
-      test: ['CMD', 'mc', 'ready', 'local']
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:9000/health']
       interval: 5s
       timeout: 5s
-      retries: 12
+      retries: 20
+      start_period: 5s
     restart: unless-stopped
 
-  # Creates the bucket once MinIO is ready, then exits
-  minio-setup:
-    image: quay.io/minio/mc
-    depends_on:
-      minio:
-        condition: service_healthy
-    environment:
-      MINIO_USER: ${S3_ACCESS_KEY:-cloudvault}
-      MINIO_PASSWORD: ${S3_SECRET_KEY:-cloudvault-secret}
-      BUCKET: ${S3_BUCKET:-cloudvault}
-    entrypoint:
-      - sh
-      - -c
-      - mc alias set local http://minio:9000 "$$MINIO_USER" "$$MINIO_PASSWORD" && mc mb --ignore-existing "local/$$BUCKET"
-    restart: 'no'
-
 volumes:
-  minio-data:
+  storage-data:

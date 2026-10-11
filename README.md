@@ -147,7 +147,7 @@ Design decisions worth knowing:
 
 - [Node.js](https://nodejs.org) 22+ and [pnpm](https://pnpm.io)
 - Python 3.11+ and [uv](https://docs.astral.sh/uv/)
-- An S3-compatible bucket (for local development, [MinIO](https://min.io) is easiest)
+- An S3-compatible bucket: R2, AWS S3 or any other. For a try-out with nothing to set up, `docker compose up` brings its own storage (see [Docker Compose](#docker-compose))
 
 ### From source
 
@@ -214,7 +214,7 @@ The storage settings come from the environment (see [Configuration](#configurati
 docker compose up --build        # then open http://localhost:8000
 ```
 
-It starts the app, a [MinIO](https://min.io) storage (its console is on http://localhost:9001) and creates the bucket. Files are kept in the `minio-data` volume, so they survive `docker compose down` (add `-v` to delete them too). The default login is `cloudvault` / `cloudvault-secret`, which is fine on your own machine; change it in a `.env` file (see `.env.example`) before using this anywhere else.
+It starts the app and a [RustFS](https://rustfs.com) storage (an open-source, S3-compatible store; its console is on http://localhost:9001), and the app creates the bucket on its first start (`S3_CREATE_BUCKET`). Files are kept in the `storage-data` volume, so they survive `docker compose down` (add `-v` to delete them too). The default login is `cloudvault` / `cloudvault-secret`, which is fine on your own machine; change it in a `.env` file (see `.env.example`) before using this anywhere else.
 
 To use a storage you already have instead, put its settings in `.env` and start only the app:
 
@@ -228,12 +228,12 @@ The `.env.example` next to `compose.yaml` shows the variables. For R2 or AWS S3 
 
 `.github/workflows/ci.yml` runs on every push to `main`, every version tag and every pull request:
 
-| Job              | What it checks                                                                                                                                                                                                                                                                                                                                                                  |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **API**          | Ruff format and lint, pytest, and a vulnerability audit of the runtime dependencies                                                                                                                                                                                                                                                                                             |
-| **Web**          | Prettier, oxlint, TypeScript, Vitest, the production build (uploaded as the `web-dist` artifact) and a vulnerability audit of the production dependencies                                                                                                                                                                                                                       |
-| **Docker image** | Builds the image, then **starts it next to a MinIO storage** and runs a real round trip: health, the web app and its routes, upload and download through presigned links, search, trash and restore, and a non-root check. Only if that passes is the image published to `ghcr.io/<owner>/cloudvault` (`latest` from `main`, plus version and commit tags; `amd64` and `arm64`) |
-| **Report**       | A summary of every gate and the test counts, also posted as a single comment that is updated on each pull request                                                                                                                                                                                                                                                               |
+| Job              | What it checks                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **API**          | Ruff format and lint, pytest, and a vulnerability audit of the runtime dependencies                                                                                                                                                                                                                                                                                                                                                         |
+| **Web**          | Prettier, oxlint, TypeScript, Vitest, the production build (uploaded as the `web-dist` artifact) and a vulnerability audit of the production dependencies                                                                                                                                                                                                                                                                                   |
+| **Docker image** | Builds the image, then **starts it with `compose.yaml`, next to its bundled storage,** and runs a real round trip from the host, as a browser would: health, the web app and its routes, upload and download through presigned links, search, trash and restore, and a non-root check. Only if that passes is the image published to `ghcr.io/<owner>/cloudvault` (`latest` from `main`, plus version and commit tags; `amd64` and `arm64`) |
+| **Report**       | A summary of every gate and the test counts, also posted as a single comment that is updated on each pull request                                                                                                                                                                                                                                                                                                                           |
 
 Every gate runs even when an earlier one fails, so the report always shows all of them. Dependabot opens grouped updates for the web and API dependencies, the actions and the base images. To run the same checks locally, use `pnpm check` (see [Development](#development)).
 
@@ -251,6 +251,7 @@ Backend settings live in `api/.env` (a template is in `api/.env.example`). Never
 | `S3_SECRET_KEY`       | Secret key (required)                                                                                                                                             |
 | `S3_ADDRESSING_STYLE` | `path` or `virtual`                                                                                                                                               |
 | `S3_PUBLIC_ENDPOINT`  | Optional. The address the browser uses to reach the storage when it differs from `S3_ENDPOINT` (for example in Docker). Presigned links are made for this address |
+| `S3_CREATE_BUCKET`    | `true` creates the bucket at startup if it is missing, for a fresh local storage (default `false`; the Compose file turns it on for its bundled storage)          |
 | `MAX_UPLOAD_BYTES`    | Optional upload size limit in bytes (default 5 TiB, S3's own maximum)                                                                                             |
 | `CORS_ORIGINS`        | JSON list of allowed frontend origins, e.g. `["http://localhost:5173"]`                                                                                           |
 | `LOG_LEVEL`           | Logging level (default `INFO`)                                                                                                                                    |
@@ -442,7 +443,7 @@ cloudvault/
 ├── pnpm-workspace.yaml          # the web app is a workspace package
 ├── .github/                     # CI workflows, the smoke test and Dependabot
 ├── Dockerfile                   # one image: the API and the built web app
-├── compose.yaml                 # the app with its own MinIO storage
+├── compose.yaml                 # the app with its own RustFS storage
 ├── api/
 │   ├── app/
 │   │   ├── api/routes/          # thin HTTP routes (objects, folders, uploads, trash, health)

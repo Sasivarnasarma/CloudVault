@@ -25,6 +25,10 @@ class BaseStorageService(ABC):
     def check_connection(self) -> bool:
         """Check connection and bucket existence with storage backend."""
 
+    @abstractmethod
+    def ensure_bucket(self) -> bool:
+        """Create the bucket if it does not exist yet. Returns True when it had to be created."""
+
     # --- listing --------------------------------------------------------------------
 
     @abstractmethod

@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY: str
     S3_SECRET_KEY: str
     S3_ADDRESSING_STYLE: str = Field(default="path", description="path or virtual")
+    S3_CREATE_BUCKET: bool = Field(
+        default=False,
+        description="Create the bucket at startup if it does not exist (for a fresh local storage)",
+    )
     S3_PUBLIC_ENDPOINT: str | None = Field(
         default=None,
         description=(

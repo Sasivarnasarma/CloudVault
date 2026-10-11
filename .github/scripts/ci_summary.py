@@ -43,7 +43,7 @@ GATES = [
     (
         "🔥",
         "Smoke test",
-        "Runs the image next to MinIO: health, web app, upload, download, search, trash, non-root",
+        "Starts the stack from compose.yaml: health, web app, upload, download, CORS, search, trash, non-root",
         ("IMAGE_SMOKE",),
     ),
     ("🛡️", "Audit", "Known vulnerabilities in shipped dependencies", ("WEB_AUDIT", "API_AUDIT")),
